@@ -1,0 +1,90 @@
+:root {
+  font-family: "Avenir Next", sans-serif;
+  font-size: 25px;
+}
+@media (max-width: 700px) {
+  :root { font-size: 5px; }
+}
+
+* {
+  margin: 0
+}
+
+h1 {
+  font-size: 2rem;
+  font-weight: bold;
+}
+
+/* Right side CSS*/
+/* Calendar grid */
+.day-of-week {
+  font-size:0.8rem;
+  margin-top: 1rem;
+}
+
+.day-of-week {
+  font-size: 0.6rem;
+  font-weight: lighter;
+}
+
+.day-of-week,
+.date-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(1rem, 0.8fr));
+}
+
+.current-day {
+  color: #111111;
+  background-color: #EEEEEE;
+}
+
+hr {
+  margin-top: 0.4rem;
+}
+
+.weatherwidget-io {
+  width: 16rem;
+}
+
+/* Right side CSS */
+.task-label {
+  color: #EEEEEE;
+  background-color: #111111;
+  font-size: 2rem;
+  border-style: solid;
+  border-width: 0.25rem;
+  border-color: #EEEEEE;
+  padding-left: 0.25rem;
+}
+
+/* Basic CSS for split */
+.split {
+  height: 100%;
+  position: fixed;
+  z-index: 1;
+  top: 0;
+  overflow-x: hidden;
+}
+
+.left {
+  width: 40%;
+  left: 0;
+  background-color: #111111;
+  color: #EEEEEE;
+}
+
+.right {
+  width: 60%;
+  right: 0;
+  background-color: #EEEEEE;
+  color: #111111;
+}
+
+/* If you want the content centered horizontally and vertically */
+.centered {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}

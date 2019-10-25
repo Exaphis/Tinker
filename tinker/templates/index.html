@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<link rel= "stylesheet" type= "text/css" href= "{{ url_for('static',filename='styles/style.css') }}">
+<head>
+    <meta charset="UTF-8">
+    <title>Tinker</title>
+</head>
+
+<body>
+<div class="split left">
+    <div class="centered">
+        <!-- Date Display -->
+        <p>{{ day_str }}</p>
+        <h1>{{ day_int }}</h1>
+        <p>{{ month|string + " " + year|string }}</p>
+
+        <div class="day-of-week">
+            <div>Su</div>
+            <div>Mo</div>
+            <div>Tu</div>
+            <div>We</div>
+            <div>Th</div>
+            <div>Fr</div>
+            <div>Sa</div>
+        </div>
+
+        <!-- Calendar Grid -->
+        <div class="date-grid">
+            {% for i in range(1, days_in_month + 1) %}
+            {% if i == day_int %}
+            <div class="current-day">{{ i }}</div>
+            {% else %}
+            <div>{{ i }}</div>
+            {% endif %}
+            {% endfor %}
+        </div>
+
+        <hr>
+
+        <!-- Weather -->
+        <a class="weatherwidget-io" href="https://forecast7.com/en/34d10n117d72/claremont/?unit=us" data-label_1="Claremont" data-label_2="Weather" data-days="3" data-theme="dark" data-basecolor="#111111" data-accent="rgba(255, 255, 255, 0)" data-highcolor="#eeeeee" data-lowcolor="#eeeeee" data-suncolor="#eeeeee" data-cloudcolor="#eeeeee" data-raincolor="#eeeeee" data-snowcolor="#eeeeee" >CLAREMONT WEATHER</a>
+<script>
+!function(d,s,id){var js,fjs=d.getElementsByTagName(s)[0];if(!d.getElementById(id)){js=d.createElement(s);js.id=id;js.src='https://weatherwidget.io/js/widget.min.js';fjs.parentNode.insertBefore(js,fjs);}}(document,'script','weatherwidget-io-js');
+</script>
+
+    </div>
+</div>
+
+<div class="split right">
+    <div class="task-label">
+        <p>Tasks</p>
+    </div>
+    <p>test</p>
+</div>
+</body>
+
+<!-- Set date grid start column !-->
+<style>
+    .date-grid div:first-child {
+        grid-column: {{ first_day_of_month + 1}};
+    }
+</style>
+
+</html>
