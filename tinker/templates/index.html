@@ -47,10 +47,31 @@
 </div>
 
 <div class="split right">
-    <div class="task-label">
+    <div class="label">
         <p>Tasks</p>
     </div>
-    <p>test</p>
+    <ul>
+        {% for task in tasks %}
+            {% if 'due_date' in task  %}
+            <li>{{ task['title'] }} @ {{ task['due_date'] }}</li>
+            {% else %}
+            <li>{{ task['title'] }}</li>
+            {% endif %}
+        {% endfor %}
+    </ul>
+
+    <div class="label">
+        <p>Calendar</p>
+    </div>
+    <ul>
+        {% for event in events %}
+            {% if 'time' in event  %}
+            <li>{{ event['summary'] }} @ {{ event['time'] }}</li>
+            {% else %}
+            <li>{{ event['summary'] }}</li>
+            {% endif %}
+        {% endfor %}
+    </ul>
 </div>
 </body>
 

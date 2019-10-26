@@ -50,16 +50,41 @@ def index():
     events = primary_events.get('items', [])  # + holiday_events.get('items', [])
     # events.sort(key=lambda x: x['start']['date'] if 'date' in x['start'] else x['start']['dateTime'])
 
+    # Within 6 days — day of week
+    # Else - month day
     data['events'] = []
     for event in events:
-        event_start = None
-        event_end = None
+        start_time = None
         if 'date' in event['start']:
-            pass
-        # data['events'].append({'name': event['summary'],
-        #                        'start'})
+            start_time = datetime.datetime.strptime(event['start']['date'], '%Y-%m-%d')
+        elif 'dateTime' in event['start']:
+            start_time = datetime.datetime.strptime(event['start']['dateTime'], '%Y-%m-%dT%H:%M:%S%z')
 
-    for event in events:
+        time_str = ''
+        if start_time:
+            if 'date' in event['end']:
+                end_time = datetime.datetime.strptime(event['end']['date'], '%Y-%m-%d')
+                end_time -= datetime.timedelta(days=1)
+
+                if end_time.date() == start_time.date():
+                    time_str = end_time.strftime('%b %d')
+                else:
+                    time_str = f"{start_time.strftime('%b %d')} - {end_time.strftime('%b %d')}"
+            elif 'dateTime' in event['end']:
+                end_time = datetime.datetime.strptime(event['end']['dateTime'], '%Y-%m-%dT%H:%M:%S%z')
+                if end_time.date() == start_time.date():
+                    time_str = f"{start_time.strftime('%b %d')} " \
+                               f"{start_time.strftime('%H:%S')} - {end_time.strftime('%H:%S')}"
+                else:
+                    time_str = f"{start_time.strftime('%b %d %H:%S')} - {start_time.strftime('%b %d %H:%s')}"
+
+        if time_str:
+            data['events'].append({'summary': event['summary'],
+                                   'time': time_str})
+        else:
+            data['events'].append({'summary': event['summary']})
+
+    for event in data['events']:
         print(event)
     print()
 
@@ -71,12 +96,22 @@ def index():
         task_results = task_service.tasks().list(tasklist=task_list[0]['id'],
                                                  showCompleted=False).execute()
         tasks = task_results.get('items', [])
-        data['tasks'] = tasks
 
+        data['tasks'] = []
         for task in tasks:
-            print(task)
+            if 'due' in task:
+                date = datetime.datetime.strptime(task['due'], '%Y-%m-%dT%H:%M:%S.000Z')
+                due_date = date.strftime('%b %d')
+
+                data['tasks'].append({'title': task['title'],
+                                      'due_date': due_date})
+            else:
+                data['tasks'].append({'title': task['title']})
     else:
         data['tasks'] = []
+
+    for task in data['tasks']:
+        print(task)
 
     return flask.render_template('index.html', **data)
 
