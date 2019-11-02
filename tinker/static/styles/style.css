@@ -1,9 +1,6 @@
 :root {
   font-family: "Avenir Next", sans-serif;
-  font-size: 25px;
-}
-@media (max-width: 700px) {
-  :root { font-size: 5px; }
+  font-size: 4vmin;
 }
 
 * {
@@ -18,19 +15,20 @@ h1 {
 /* Right side CSS*/
 /* Calendar grid */
 .day-of-week {
-  font-size:0.8rem;
+  font-size: 0.8rem;
   margin-top: 1rem;
-}
-
-.day-of-week {
-  font-size: 0.6rem;
-  font-weight: lighter;
+  /*font-weight: lighter;*/
 }
 
 .day-of-week,
 .date-grid {
   display: grid;
-  grid-template-columns: repeat(7, minmax(1rem, 0.8fr));
+  grid-template-columns: repeat(7, 1.5rem);
+  justify-content: inherit;
+  justify-items: inherit;
+  margin-left: auto;
+  margin-right: auto;
+  width: 10.5rem;
 }
 
 .current-day {
@@ -40,21 +38,74 @@ h1 {
 
 hr {
   margin-top: 0.4rem;
+  margin-bottom: 0.4rem;
 }
 
-.weatherwidget-io {
-  width: 16rem;
+/* Weather */
+/* Current weather flex */
+.current-weather {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+}
+
+.current-weather > * {
+  align-items: center;
+  width: 1rem;
+  flex-grow: 10;
+  white-space: nowrap;
+  margin: 0 0.2rem;
+}
+
+.current-weather .wi {
+  flex-grow: 1;
+}
+
+/* Forecast flex */
+.forecast-weather {
+  width: 12rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+}
+
+.forecast-weather > * {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-grow: 2;
+  white-space: nowrap;
+  margin: 0 0.2rem;
+  width: 1rem;
+}
+
+#temp {
+  font-size: 0.8rem;
+  /*font-weight: lighter;*/
 }
 
 /* Right side CSS */
 .label {
   color: #EEEEEE;
   background-color: #111111;
-  font-size: 2rem;
+  font-size: 1.5rem;
   border-style: solid;
   border-width: 0.25rem;
   border-color: #EEEEEE;
   padding-left: 0.25rem;
+}
+
+/*li > * {*/
+/*  vertical-align: middle;*/
+/*}*/
+
+.at-time {
+  /*border: thin solid #555555;*/
+  /*border-radius: 0.5rem;*/
+  font-size: 0.6rem;
+  padding: 0 0.1rem;
 }
 
 /* Basic CSS for split */

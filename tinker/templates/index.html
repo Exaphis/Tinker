@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
-<link rel= "stylesheet" type= "text/css" href= "{{ url_for('static',filename='styles/style.css') }}">
+<base href="https://127.0.0.1:5000/">
+<link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='styles/style.css') }}">
+<link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='styles/weather-icons.min.css') }}">
 <head>
     <meta charset="UTF-8">
     <title>Tinker</title>
@@ -14,6 +16,7 @@
         <h1>{{ day_int }}</h1>
         <p>{{ month|string + " " + year|string }}</p>
 
+        <!-- Calendar Grid -->
         <div class="day-of-week">
             <div>Su</div>
             <div>Mo</div>
@@ -23,8 +26,6 @@
             <div>Fr</div>
             <div>Sa</div>
         </div>
-
-        <!-- Calendar Grid -->
         <div class="date-grid">
             {% for i in range(1, days_in_month + 1) %}
             {% if i == day_int %}
@@ -38,38 +39,46 @@
         <hr>
 
         <!-- Weather -->
-        <a class="weatherwidget-io" href="https://forecast7.com/en/34d10n117d72/claremont/?unit=us" data-label_1="Claremont" data-label_2="Weather" data-days="3" data-theme="dark" data-basecolor="#111111" data-accent="rgba(255, 255, 255, 0)" data-highcolor="#eeeeee" data-lowcolor="#eeeeee" data-suncolor="#eeeeee" data-cloudcolor="#eeeeee" data-raincolor="#eeeeee" data-snowcolor="#eeeeee" >CLAREMONT WEATHER</a>
-<script>
-!function(d,s,id){var js,fjs=d.getElementsByTagName(s)[0];if(!d.getElementById(id)){js=d.createElement(s);js.id=id;js.src='https://weatherwidget.io/js/widget.min.js';fjs.parentNode.insertBefore(js,fjs);}}(document,'script','weatherwidget-io-js');
-</script>
+{#        <div class="location-name">#}
+{#            <h3>{{ weather['location_name'] }}</h3>#}
+{#        </div>#}
+        <div class="current-weather">
+            <h3>{{ weather['current_temp']|string + '°F' }}</h3>
+            <i class="{{ weather['current_icon'] }}"></i>
+            <h3>{{ weather['current_summary'] }}</h3>
+        </div>
+        <div class="forecast-weather">
+            {% for i in range(0, 3) %}
+            <div class="{{ i|string }}_forecast">
+                <h4>{{ weather[i|string + '_day'] }}</h4>
+                <i class="{{ weather[i|string + '_icon'] }}"></i>
+                <p id="temp">{{ weather[i|string + '_high']|string + '°F' }}</p>
+                <p id="temp">{{ weather[i|string + '_low']|string + '°F' }}</p>
+            </div>
+            {% endfor %}
+        </div>
 
     </div>
 </div>
 
 <div class="split right">
-    <div class="label">
-        <p>Tasks</p>
-    </div>
+    <div class="label"><span>Tasks</span></div>
     <ul>
         {% for task in tasks %}
-            {% if 'due_date' in task  %}
-            <li>{{ task['title'] }} @ {{ task['due_date'] }}</li>
-            {% else %}
-            <li>{{ task['title'] }}</li>
-            {% endif %}
+            <li>
+                <span>{{ task['title'] }}</span>
+                {% if 'due_date' in task %} <span class="at-time">{{ task['due_date'] }}</span> {% endif %}
+            </li>
         {% endfor %}
     </ul>
 
-    <div class="label">
-        <p>Calendar</p>
-    </div>
+    <div class="label"><span>Calendar</span></div>
     <ul>
         {% for event in events %}
-            {% if 'time' in event  %}
-            <li>{{ event['summary'] }} @ {{ event['time'] }}</li>
-            {% else %}
-            <li>{{ event['summary'] }}</li>
-            {% endif %}
+            <li>
+                <span>{{ event['summary'] }}</span>
+                {% if 'time' in event %} <span class="at-time"> {{ event['time'] }} </span> {% endif %}
+            </li>
         {% endfor %}
     </ul>
 </div>

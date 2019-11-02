@@ -1,13 +1,64 @@
+import asyncio
 import calendar
 import datetime
 
+import pyppeteer
 import google.oauth2.credentials
 import google_auth_oauthlib.flow
 import googleapiclient.discovery
+import io
+import requests
 
-from tinker import app, flask
+from tinker import app, flask, loop
+from . import secrets
 
 SCOPES = ['https://www.googleapis.com/auth/calendar', 'https://www.googleapis.com/auth/tasks.readonly']
+
+
+def weather_icon_path(darksky_icon):
+    if darksky_icon == 'clear-day':
+        return 'wi wi-day-sunny'
+    elif darksky_icon == 'clear-night':
+        return 'wi wi-night-clear'
+    elif darksky_icon == 'rain':
+        return 'wi wi-rain'
+    elif darksky_icon == 'snow':
+        return 'wi wi-snow'
+    elif darksky_icon == 'sleet':
+        return 'wi wi-sleet'
+    elif darksky_icon == 'wind':
+        return 'wi wi-wind'
+    elif darksky_icon == 'fog':
+        return 'wi wi-fog'
+    elif darksky_icon == 'cloudy':
+        return 'wi wi-cloudy'
+    elif darksky_icon == 'partly-cloudy-day':
+        return 'wi wi-forecast-io-partly-cloudy-day'
+    elif darksky_icon == 'partly-cloudy-night':
+        return 'wi wi-forecast-io-partly-cloudy-night'
+    else:
+        return 'wi wi-na'
+
+
+def three_day_weather(latitude, longitude, location_name):
+    now = datetime.datetime.now()
+    resp = requests.get(f'https://api.darksky.net/forecast/{secrets.DARK_SKY_SECRET}/{latitude},{longitude}').json()
+    weather_data = {
+        'current_icon': weather_icon_path(resp['currently']['icon']),
+        'current_temp': round(resp['currently']['temperature']),
+        'current_summary': resp['currently']['summary'],
+        'location_name': location_name
+    }
+
+    for i in range(0, 3):
+        weather_data[f'{i}_day'] = now.strftime('%a')
+        weather_data[f'{i}_icon'] = weather_icon_path(resp['daily']['data'][i]['icon'])
+        weather_data[f'{i}_high'] = round(resp['daily']['data'][i]['temperatureHigh'])
+        weather_data[f'{i}_low'] = round(resp['daily']['data'][i]['temperatureLow'])
+
+        now += datetime.timedelta(days=1)
+
+    return weather_data
 
 
 @app.before_request
@@ -23,7 +74,9 @@ def index():
     if 'credentials' not in flask.session:
         return flask.redirect(flask.url_for('authorize'))
 
-    data = {}
+    data = {
+        'weather': three_day_weather("34.106081", "-117.710486", "Harvey Mudd")
+    }
 
     # Get date/time data
     now = datetime.datetime.now()
@@ -84,9 +137,9 @@ def index():
         else:
             data['events'].append({'summary': event['summary']})
 
-    for event in data['events']:
-        print(event)
-    print()
+    # for event in data['events']:
+    #     print(event)
+    # print()
 
     # Get Google Tasks
     task_service = googleapiclient.discovery.build('tasks', 'v1', credentials=credentials)
@@ -110,10 +163,48 @@ def index():
     else:
         data['tasks'] = []
 
-    for task in data['tasks']:
-        print(task)
+    # for task in data['tasks']:
+    #     print(task)
 
     return flask.render_template('index.html', **data)
+
+
+async def html_to_jpg(content, width, height):
+    # Disable signal handling to because html_to_jpg is not called in main thread, ignore certificate errors
+    browser = await pyppeteer.launch(
+        handleSIGINT=False,
+        handleSIGTERM=False,
+        handleSIGHUP=False,
+        headless=True,
+        ignoreHTTPSErrors=True,
+        args=["--ignore-certificate-errors", "--disable-web-security"]
+    )
+    # print(content)
+    page = await browser.newPage()
+    page.on('console', lambda msg: print('MSG: ', msg.text))
+    await page.setViewport({'width': width, 'height': height})
+    await page.goto(f"data:text/html,{content}", {'waitUntil': 'networkidle2'})
+    await asyncio.sleep(10)
+    buffer = await page.screenshot({"quality": 100})
+    await browser.close()
+
+    return buffer
+
+
+@app.route("/jpg")
+def jpg():
+    height = flask.request.args.get('height', type=int, default=384)
+    width = flask.request.args.get('width', type=int, default=640)
+
+    content = index()
+    image_binary = loop.run_until_complete(html_to_jpg(content, width, height))
+
+    return flask.send_file(
+        io.BytesIO(image_binary),
+        mimetype='image/jpeg',
+        as_attachment=True,
+        attachment_filename='index.jpg'
+    )
 
 
 @app.route("/authorize")
@@ -125,7 +216,8 @@ def authorize():
         redirect_uri=flask.url_for("oauth2callback", _external=True))
     authorization_url, state = flow.authorization_url(
         access_type='offline',
-        include_granted_scopes='true')
+        include_granted_scopes='true',
+        prompt='consent')
 
     flask.session['state'] = state
     flask.session['code_verifier'] = flow.code_verifier
