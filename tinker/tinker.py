@@ -5,16 +5,21 @@ import pickle
 
 from PIL import Image
 import pyppeteer
+import flask
 import google.oauth2.credentials
 import google_auth_oauthlib.flow
 import googleapiclient.discovery
 import io
 import requests
 
-from tinker import app, flask, loop
 from . import secrets
 
 SCOPES = ['https://www.googleapis.com/auth/calendar', 'https://www.googleapis.com/auth/tasks.readonly']
+
+loop = asyncio.get_event_loop()
+
+app = flask.Flask(__name__)
+app.secret_key = secrets.SECRET_KEY
 
 
 def weather_icon_path(darksky_icon):
