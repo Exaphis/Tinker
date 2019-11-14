@@ -43,8 +43,10 @@
 {#            <h3>{{ weather['location_name'] }}</h3>#}
 {#        </div>#}
         <div class="current-weather">
-            <h3>{{ weather['current_temp']|string + '°F' }}</h3>
-            <i class="{{ weather['current_icon'] }}"></i>
+            <div id="temp-icon-wrapper">
+                <h3>{{ weather['current_temp']|string + '°F' }}</h3>
+                <i class="{{ weather['current_icon'] }}"></i>
+            </div>
             <h3>{{ weather['current_summary'] }}</h3>
         </div>
         <div class="forecast-weather">

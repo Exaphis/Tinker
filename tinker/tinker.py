@@ -2,6 +2,7 @@ import asyncio
 import calendar
 import datetime
 
+from PIL import Image
 import pyppeteer
 import google.oauth2.credentials
 import google_auth_oauthlib.flow
@@ -169,7 +170,7 @@ def index():
     return flask.render_template('index.html', **data)
 
 
-async def html_to_jpg(content, width, height):
+async def html_to_png(content, width, height):
     # Disable signal handling to because html_to_jpg is not called in main thread, ignore certificate errors
     browser = await pyppeteer.launch(
         handleSIGINT=False,
@@ -185,25 +186,32 @@ async def html_to_jpg(content, width, height):
     await page.setViewport({'width': width, 'height': height})
     await page.goto(f"data:text/html,{content}", {'waitUntil': 'networkidle2'})
     await asyncio.sleep(10)
-    buffer = await page.screenshot({"quality": 100})
+    buffer = await page.screenshot({"quality": 100, "type": "png"})
     await browser.close()
 
     return buffer
 
 
-@app.route("/jpg")
-def jpg():
+@app.route("/bmp")
+def bmp():
     height = flask.request.args.get('height', type=int, default=384)
     width = flask.request.args.get('width', type=int, default=640)
 
     content = index()
-    image_binary = loop.run_until_complete(html_to_jpg(content, width, height))
+    image_binary = loop.run_until_complete(html_to_png(content, width, height))
+
+    img = Image.open(io.BytesIO(image_binary))
+    img.save('test.bmp', format='BMP')
+
+    converted_binary = io.BytesIO()
+    img.save(converted_binary, format='BMP')
+    converted_binary.seek(0)
 
     return flask.send_file(
-        io.BytesIO(image_binary),
-        mimetype='image/jpeg',
+        converted_binary,
+        mimetype='image/bmp',
         as_attachment=True,
-        attachment_filename='index.jpg'
+        attachment_filename='index.bmp'
     )
 
 
