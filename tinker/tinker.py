@@ -1,6 +1,7 @@
 import asyncio
 import calendar
 import datetime
+import pickle
 
 from PIL import Image
 import pyppeteer
@@ -74,6 +75,9 @@ def before_request():
 def index():
     if 'credentials' not in flask.session:
         return flask.redirect(flask.url_for('authorize'))
+
+    with open('token.pickle', 'wb') as token:
+        pickle.dump(flask.session['credentials'], token)
 
     data = {
         'weather': three_day_weather("34.106081", "-117.710486", "Harvey Mudd")
