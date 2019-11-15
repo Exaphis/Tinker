@@ -137,9 +137,9 @@ def index():
                 end_time = datetime.datetime.strptime(event['end']['dateTime'], '%Y-%m-%dT%H:%M:%S%z')
                 if end_time.date() == start_time.date():
                     time_str = f"{start_time.strftime('%b %d')} " \
-                               f"{start_time.strftime('%H:%S')} - {end_time.strftime('%H:%S')}"
+                               f"{start_time.strftime('%H:%M')} - {end_time.strftime('%H:%M')}"
                 else:
-                    time_str = f"{start_time.strftime('%b %d %H:%S')} - {start_time.strftime('%b %d %H:%s')}"
+                    time_str = f"{start_time.strftime('%b %d %H:%M')} - {end_time.strftime('%b %d %H:%M')}"
 
         if time_str:
             data['events'].append({'summary': event['summary'],
