@@ -82,6 +82,10 @@ hr {
   /*font-weight: lighter;*/
 }
 
+.wi {
+  margin-bottom: 1vh;
+}
+
 /* Right side CSS */
 .label {
   color: #EEEEEE;

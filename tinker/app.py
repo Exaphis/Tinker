@@ -5,6 +5,7 @@ import pickle
 
 from PIL import Image
 import pyppeteer
+import pytz
 import flask
 import google.oauth2.credentials
 import google_auth_oauthlib.flow
@@ -14,11 +15,31 @@ import requests
 
 from . import secrets
 
+
+class ReverseProxied(object):
+    def __init__(self, app):
+        self.app = app
+
+    def __call__(self, environ, start_response):
+        script_name = environ.get('HTTP_X_SCRIPT_NAME', '')
+        if script_name:
+            environ['SCRIPT_NAME'] = script_name
+            path_info = environ['PATH_INFO']
+            if path_info.startswith(script_name):
+                environ['PATH_INFO'] = path_info[len(script_name):]
+
+        scheme = environ.get('HTTP_X_SCHEME', '')
+        if scheme:
+            environ['wsgi.url_scheme'] = scheme
+        return self.app(environ, start_response)
+
+
 SCOPES = ['https://www.googleapis.com/auth/calendar', 'https://www.googleapis.com/auth/tasks.readonly']
 
 loop = asyncio.get_event_loop()
 
 app = flask.Flask(__name__)
+app.wsgi_app = ReverseProxied(app.wsgi_app)
 app.secret_key = secrets.SECRET_KEY
 
 
@@ -81,15 +102,22 @@ def index():
     if 'credentials' not in flask.session:
         return flask.redirect(flask.url_for('authorize'))
 
-    with open('token.pickle', 'wb') as token:
-        pickle.dump(flask.session['credentials'], token)
+    # with open('token.pickle', 'wb') as token:
+    #     pickle.dump(flask.session['credentials'], token)
+
+    # with open('token.pickle', 'rb') as token:
+    #     flask.session['credentials'] = pickle.load(token)
 
     data = {
         'weather': three_day_weather("34.106081", "-117.710486", "Harvey Mudd")
     }
 
     # Get date/time data
-    now = datetime.datetime.now()
+    if hasattr(flask.g, 'tz') and flask.g.tz in pytz.all_timezones:
+        now = datetime.datetime.now(tz=pytz.timezone(flask.g.tz))
+    else:
+        now = datetime.datetime.now()
+
     data['year'] = now.year
     data['month'] = now.strftime('%B')
     data['day_int'] = now.day
@@ -189,9 +217,8 @@ async def html_to_png(content, width, height):
         ignoreHTTPSErrors=True,
         args=["--ignore-certificate-errors", "--disable-web-security"]
     )
-    # print(content)
+
     page = await browser.newPage()
-    page.on('console', lambda msg: print('MSG: ', msg.text))
     await page.setViewport({'width': width, 'height': height})
     await page.goto(f"data:text/html,{content}", {'waitUntil': 'networkidle2'})
     await asyncio.sleep(10)
@@ -206,11 +233,13 @@ def bmp():
     height = flask.request.args.get('height', type=int, default=384)
     width = flask.request.args.get('width', type=int, default=640)
 
+    # TZ should be parsable by PyTZ
+    flask.g.tz = flask.request.args.get('tz', type=str, default="")
+
     content = index()
     image_binary = loop.run_until_complete(html_to_png(content, width, height))
 
     img = Image.open(io.BytesIO(image_binary))
-    img.save('test.bmp', format='BMP')
 
     converted_binary = io.BytesIO()
     img.save(converted_binary, format='BMP')
@@ -270,4 +299,5 @@ def oauth2callback():
 
 
 if __name__ == '__main__':
-    app.run(ssl_context='adhoc')
+    # app.run(ssl_context='adhoc')
+    app.run(host='0.0.0.0', port=5001)
