@@ -237,9 +237,14 @@ def bmp():
     # TZ should be parsable by PyTZ
     flask.g.tz = flask.request.args.get('tz', type=str, default="")
 
-    base_dir = pathlib.Path(__file__).parent.absolute()
     # hacky replacement of css href tag
-    content = index().replace('/static/',  f'file://{base_dir}/static/')
+    base_dir = pathlib.Path(__file__).parent.absolute()
+    content = index()
+    if type(content) == str:
+        content = content.replace('/static/',  f'file://{base_dir}/static/')
+    else:
+        content = content.get_data().replace('/static/',  f'file://{base_dir}/static/')
+
     print(content)
     image_binary = loop.run_until_complete(html_to_png(content, width, height))
 
