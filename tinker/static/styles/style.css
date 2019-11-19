@@ -82,7 +82,8 @@ hr {
   /*font-weight: lighter;*/
 }
 
-.wi {
+.forecast-weather .wi {
+  margin-top: 1vh;
   margin-bottom: 1vh;
 }
 
