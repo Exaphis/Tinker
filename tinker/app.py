@@ -237,7 +237,7 @@ def bmp():
 
     # hacky replacement of css href tag
     base_dir = pathlib.Path(__file__).parent.absolute()
-    content = index().replace('/static/',  f'file://{base_dir}/static/')
+    content = index().replace(flask.url_for('static'),  f'file://{base_dir}/static/')
 
     image_binary = loop.run_until_complete(html_to_png(content, width, height))
 
