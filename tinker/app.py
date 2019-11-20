@@ -100,14 +100,12 @@ def before_request():
 
 @app.route('/')
 def index():
+    if pathlib.Path('token.pickle').is_file():
+        with open('token.pickle', 'wb') as token:
+            flask.session['credentials'] = pickle.load(token)
+
     if 'credentials' not in flask.session:
         return flask.redirect(flask.url_for('authorize'))
-
-    # with open('token.pickle', 'wb') as token:
-    #     pickle.dump(flask.session['credentials'], token)
-
-    # with open('token.pickle', 'rb') as token:
-    #     flask.session['credentials'] = pickle.load(token)
 
     data = {
         'weather': three_day_weather("34.106081", "-117.710486", "Harvey Mudd")
@@ -239,13 +237,8 @@ def bmp():
 
     # hacky replacement of css href tag
     base_dir = pathlib.Path(__file__).parent.absolute()
-    content = index()
-    if type(content) == str:
-        content = content.replace('/static/',  f'file://{base_dir}/static/')
-    else:
-        content = content.get_data().replace('/static/',  f'file://{base_dir}/static/')
+    content = index().replace('/static/',  f'file://{base_dir}/static/')
 
-    print(content)
     image_binary = loop.run_until_complete(html_to_png(content, width, height))
 
     img = Image.open(io.BytesIO(image_binary))
