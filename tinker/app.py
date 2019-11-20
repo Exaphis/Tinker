@@ -101,7 +101,7 @@ def before_request():
 @app.route('/')
 def index():
     if pathlib.Path('token.pickle').is_file():
-        with open('token.pickle', 'wb') as token:
+        with open('token.pickle', 'rb') as token:
             flask.session['credentials'] = pickle.load(token)
 
     if 'credentials' not in flask.session:
