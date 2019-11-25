@@ -227,7 +227,7 @@ async def html_to_png(content, width, height):
     return buffer
 
 
-@app.route("/bmp")
+@app.route("/bmp/")
 def bmp():
     height = flask.request.args.get('height', type=int, default=384)
     width = flask.request.args.get('width', type=int, default=640)
@@ -250,9 +250,7 @@ def bmp():
 
     return flask.send_file(
         converted_binary,
-        mimetype='image/bmp',
-        as_attachment=True,
-        attachment_filename='index.bmp'
+        mimetype='image/bmp'
     )
 
 
