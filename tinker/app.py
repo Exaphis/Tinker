@@ -243,7 +243,7 @@ def bmp():
     image_binary = loop.run_until_complete(html_to_png(content, width, height))
 
     img = Image.open(io.BytesIO(image_binary))
-
+    img.convert('1')
     converted_binary = io.BytesIO()
     img.save(converted_binary, format='BMP')
     converted_binary.seek(0)
