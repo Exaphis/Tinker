@@ -139,7 +139,7 @@ def index():
                                                maxResults=10, singleEvents=True,
                                                orderBy='startTime').execute()
 
-    # Uncomment if you want holidays to be added to the list:
+    # Uncomment if you want holidays to be added to calendar events:
     # holiday_events = service.events().list(calendarId='en.usa#holiday@group.v.calendar.google.com', timeMin=now,
     #                                        maxResults=10, singleEvents=True,
     #                                        orderBy='startTime').execute()
@@ -233,7 +233,7 @@ def bmp():
     # Should be parsable by PyTZ
     flask.g.tz = flask.request.args.get('tz', type=str, default='')
 
-    # hacky replacement of css href tag
+    # hacky replacement of css href tag to reference file on disk
     base_dir = Path(__file__).parent.absolute()
     to_replace = flask.url_for('static', filename='replace_me').replace('replace_me', '')
     content = index().replace(to_replace,  f'file://{base_dir}/static/')

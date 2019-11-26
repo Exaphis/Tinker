@@ -12,12 +12,11 @@ h1 {
   font-weight: bold;
 }
 
-/* Right side CSS*/
+/* ------ Left side CSS ----- */
 /* Calendar grid */
 .day-of-week {
   font-size: 0.8rem;
   margin-top: 1rem;
-  /*font-weight: lighter;*/
 }
 
 .day-of-week,
@@ -42,7 +41,7 @@ hr {
 }
 
 /* Weather */
-/* Current weather flex */
+/* Current weather flex box */
 .current-weather {
   display: flex;
   flex-direction: column;
@@ -79,7 +78,6 @@ hr {
 
 #temp {
   font-size: 0.8rem;
-  /*font-weight: lighter;*/
 }
 
 .forecast-weather .wi {
@@ -87,7 +85,7 @@ hr {
   margin-bottom: 1vh;
 }
 
-/* Right side CSS */
+/* ----- Right side CSS ----- */
 .label {
   color: #EEEEEE;
   background-color: #111111;
@@ -98,13 +96,7 @@ hr {
   padding-left: 0.25rem;
 }
 
-/*li > * {*/
-/*  vertical-align: middle;*/
-/*}*/
-
 .at-time {
-  /*border: thin solid #555555;*/
-  /*border-radius: 0.5rem;*/
   font-size: 0.6rem;
   padding: 0 0.1rem;
   font-weight: bold;
@@ -133,7 +125,7 @@ hr {
   color: #111111;
 }
 
-/* If you want the content centered horizontally and vertically */
+/* Center content */
 .centered {
   position: absolute;
   top: 50%;
