@@ -1,7 +1,7 @@
 import asyncio
 import calendar
 import datetime
-import pathlib
+from pathlib import Path
 import pickle
 
 from PIL import Image
@@ -17,6 +17,7 @@ import requests
 from . import secrets
 
 
+# Taken from https://web.archive.org/web/20190420170234/http://flask.pocoo.org/snippets/35/
 class ReverseProxied(object):
     def __init__(self, app):
         self.app = app
@@ -92,6 +93,7 @@ def three_day_weather(latitude, longitude, location_name):
 
 @app.before_request
 def before_request():
+    # Redirect HTTP to HTTPS
     if flask.request.url.startswith('http://'):
         url = flask.request.url.replace('http://', 'https://', 1)
         code = 301
@@ -100,29 +102,32 @@ def before_request():
 
 @app.route('/')
 def index():
-    if pathlib.Path('token.pickle').is_file():
+    if Path('token.pickle').is_file():  # Read pickled token if exists
         with open('token.pickle', 'rb') as token:
             flask.session['credentials'] = pickle.load(token)
-
-    if 'credentials' not in flask.session:
+    elif 'credentials' not in flask.session:  # Redirect to OAuth authorization route if credentials do not exist
         return flask.redirect(flask.url_for('authorize'))
 
-    data = {
-        'weather': three_day_weather("34.106081", "-117.710486", "Harvey Mudd")
-    }
+    # Dump token if one doesn't exist already
+    if not Path('token.pickle').is_file():
+        with open('token.pickle', 'wb') as token:
+            pickle.dump(flask.session['credentials'], token)
 
-    # Get date/time data
+    # Get date/time data (exists within g object if index is called from bmp route)
     if hasattr(flask.g, 'tz') and flask.g.tz in pytz.all_timezones:
         now = datetime.datetime.now(tz=pytz.timezone(flask.g.tz))
     else:
         now = datetime.datetime.now()
 
-    data['year'] = now.year
-    data['month'] = now.strftime('%B')
-    data['day_int'] = now.day
-    data['day_str'] = now.strftime('%A')
-    data['first_day_of_month'], data['days_in_month'] = calendar.monthrange(now.year, now.month)
-    data['first_day_of_month'] = (data['first_day_of_month'] + 1) % 7
+    data = {
+        'weather': three_day_weather("34.106081", "-117.710486", "Harvey Mudd"),
+        'year': now.year,
+        'month': now.strftime('%B'),
+        'day_int': now.day,
+        'day_str': now.strftime('%A'),
+        'first_day_of_month': (calendar.monthrange(now.year, now.month)[0] + 1) % 7,
+        'days_in_month': calendar.monthrange(now.year, now.month)[1]
+    }
 
     # Set up Google API credentials
     credentials = google.oauth2.credentials.Credentials(**flask.session['credentials'])
@@ -133,15 +138,18 @@ def index():
     primary_events = cal_service.events().list(calendarId='primary', timeMin=now,
                                                maxResults=10, singleEvents=True,
                                                orderBy='startTime').execute()
+
+    # Uncomment if you want holidays to be added to the list:
     # holiday_events = service.events().list(calendarId='en.usa#holiday@group.v.calendar.google.com', timeMin=now,
     #                                        maxResults=10, singleEvents=True,
     #                                        orderBy='startTime').execute()
 
     events = primary_events.get('items', [])  # + holiday_events.get('items', [])
+
+    # Must sort events by date if you combine multiple calendars
     # events.sort(key=lambda x: x['start']['date'] if 'date' in x['start'] else x['start']['dateTime'])
 
-    # Within 6 days — day of week
-    # Else - month day
+    # Parse events content, start time, and end time to strings
     data['events'] = []
     for event in events:
         start_time = None
@@ -174,20 +182,15 @@ def index():
         else:
             data['events'].append({'summary': event['summary']})
 
-    # for event in data['events']:
-    #     print(event)
-    # print()
-
-    # Get Google Tasks
+    # Get Google Tasks list
     task_service = googleapiclient.discovery.build('tasks', 'v1', credentials=credentials)
 
     task_list = task_service.tasklists().list(maxResults=1).execute().get('items', [])
+    data['tasks'] = []
     if task_list:
         task_results = task_service.tasks().list(tasklist=task_list[0]['id'],
                                                  showCompleted=False).execute()
         tasks = task_results.get('items', [])
-
-        data['tasks'] = []
         for task in tasks:
             if 'due' in task:
                 date = datetime.datetime.strptime(task['due'], '%Y-%m-%dT%H:%M:%S.000Z')
@@ -197,11 +200,6 @@ def index():
                                       'due_date': due_date})
             else:
                 data['tasks'].append({'title': task['title']})
-    else:
-        data['tasks'] = []
-
-    # for task in data['tasks']:
-    #     print(task)
 
     return flask.render_template('index.html', **data)
 
@@ -232,26 +230,27 @@ def bmp():
     height = flask.request.args.get('height', type=int, default=384)
     width = flask.request.args.get('width', type=int, default=640)
 
-    # TZ should be parsable by PyTZ
+    # Store input TZ in g, index will use it to calculate current date
+    # Should be parsable by PyTZ
     flask.g.tz = flask.request.args.get('tz', type=str, default='')
 
     # hacky replacement of css href tag
-    base_dir = pathlib.Path(__file__).parent.absolute()
+    base_dir = Path(__file__).parent.absolute()
     to_replace = flask.url_for('static', filename='replace_me').replace('replace_me', '')
     content = index().replace(to_replace,  f'file://{base_dir}/static/')
 
     image_binary = loop.run_until_complete(html_to_png(content, width, height))
 
+    # Convert image to 8 bit black/white
     img = Image.open(io.BytesIO(image_binary))
     img = img.convert('L')
     converted_binary = io.BytesIO()
     img.save(converted_binary, format='BMP')
+
+    # Seek to start so file can be sent
     converted_binary.seek(0)
 
-    return flask.send_file(
-        converted_binary,
-        mimetype='image/bmp'
-    )
+    return flask.send_file(converted_binary, mimetype='image/bmp')
 
 
 @app.route("/authorize")
