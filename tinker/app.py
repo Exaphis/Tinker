@@ -218,7 +218,6 @@ async def html_to_png(content, width, height):
     page = await browser.newPage()
     await page.setViewport({'width': width, 'height': height})
     await page.goto(f"data:text/html,{content}", {'waitUntil': 'networkidle2'})
-    await asyncio.sleep(10)
     buffer = await page.screenshot({"quality": 100, "type": "png"})
     await browser.close()
 
