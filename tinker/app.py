@@ -102,16 +102,22 @@ def before_request():
 
 @app.route('/')
 def index():
-    if Path('token.pickle').is_file():  # Read pickled token if exists
-        with open('token.pickle', 'rb') as token:
-            flask.session['credentials'] = pickle.load(token)
-    elif 'credentials' not in flask.session:  # Redirect to OAuth authorization route if credentials do not exist
-        return flask.redirect(flask.url_for('authorize'))
+    # Secure access to pickled tokens with secret API keys
+    # Don't want random people being able to access your calendar!
+    if 'Authorization' in flask.request.headers:
+        api_key = flask.request.headers['Authorization']
+        if api_key in secrets.AUTHORIZED_TOKENS:
+            path = secrets.AUTHORIZED_TOKENS[api_key]
+            if Path(path).is_file():
+                try:
+                    with open(path, 'rb') as token:
+                        flask.session['credentials'] = pickle.load(token)
+                except pickle.UnpicklingError:
+                    if 'credentials' in flask.session:
+                        del flask.session['credentials']
 
-    # Dump token if one doesn't exist already
-    if not Path('token.pickle').is_file():
-        with open('token.pickle', 'wb') as token:
-            pickle.dump(flask.session['credentials'], token)
+    if 'credentials' not in flask.session:
+        return flask.redirect(flask.url_for('authorize'))
 
     # Get date/time data (exists within g object if index is called from bmp route)
     if hasattr(flask.g, 'tz') and flask.g.tz in pytz.all_timezones:
@@ -146,7 +152,7 @@ def index():
 
     events = primary_events.get('items', [])  # + holiday_events.get('items', [])
 
-    # Must sort events by date if you combine multiple calendars
+    # Sort events by date if you combine multiple calendars
     # events.sort(key=lambda x: x['start']['date'] if 'date' in x['start'] else x['start']['dateTime'])
 
     # Parse events content, start time, and end time to strings
@@ -205,7 +211,7 @@ def index():
 
 
 async def html_to_png(content, width, height):
-    # Disable signal handling to because html_to_jpg is not called in main thread, ignore certificate errors
+    # Disable signal handling because html_to_jpg is not called in main thread, ignore certificate errors
     browser = await pyppeteer.launch(
         handleSIGINT=False,
         handleSIGTERM=False,
@@ -233,14 +239,23 @@ def bmp():
     # Should be parsable by PyTZ
     flask.g.tz = flask.request.args.get('tz', type=str, default='')
 
+    content = index()
+
+    # If authentication is needed, index() will return
+    # a Response object redirecting user to OAuth page
+    if not isinstance(content, str):
+        flask.abort(401)
+
     # hacky replacement of css href tag to reference file on disk
+    # use local file instead of network to speed up access and
+    # avoid weirdness when Tinker is being reverse proxied
     base_dir = Path(__file__).parent.absolute()
     to_replace = flask.url_for('static', filename='replace_me').replace('replace_me', '')
-    content = index().replace(to_replace,  f'file://{base_dir}/static/')
+    content = content.replace(to_replace,  f'file://{base_dir}/static/')
 
     image_binary = loop.run_until_complete(html_to_png(content, width, height))
 
-    # Convert image to 8 bit black/white
+    # Convert image to 8 bit black/white for display in Arduino
     img = Image.open(io.BytesIO(image_binary))
     img = img.convert('L')
     converted_binary = io.BytesIO()
