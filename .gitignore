@@ -130,3 +130,4 @@ dmypy.json
 # Ignore secrets file
 tinker/secrets.py
 client_secrets.json
+Tinker-Arduino/tinker-secrets.h
