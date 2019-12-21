@@ -14,6 +14,11 @@ import googleapiclient.discovery
 import io
 import requests
 
+# secrets file contains
+#   - Flask secret (SECRET_KEY)
+#   - Dark Sky API key (DARK_SKY_SECRET)
+#   - Authorized tokens for reading pickled token file
+#       Ex. AUTHORIZED_TOKENS = {"Token abc123": "token.pickle"}
 from . import secrets
 
 

@@ -1,8 +1,15 @@
+// tinker-secrets contains
+//  - NUM_SSIDS
+//  - SSID0 / PASS0, etc.
+//  - AUTH_HEADER for connection to server
 #include "tinker-secrets.h"
 #include <GxEPD2_BW.h>
 
 // GxEPD2_BW < GxEPD2_750, GxEPD2_750::HEIGHT / 2 > display(GxEPD2_750(/*CS=D8*/ SS, /*DC=D3*/ 0, /*RST=D4*/ 2, /*BUSY=D2*/ 4));
-GxEPD2_BW < GxEPD2_750, GxEPD2_750::HEIGHT / 2 > display(GxEPD2_750(/*CS=D8*/ SS, /*DC=D3*/ D1, /*RST=D4*/ D6, /*BUSY=D2*/ D2));
+
+// Use these pins instead of the default in GxEPD2
+// to avoid boot issues when certain pins are pulled low
+GxEPD2_BW < GxEPD2_750, GxEPD2_750::HEIGHT / 2 > display(GxEPD2_750(/*CS=D8*/ SS, /*DC=D1*/ D1, /*RST=D6*/ D6, /*BUSY=D2*/ D2));
 
 #include <ESP8266WiFi.h>
 
@@ -12,7 +19,7 @@ GxEPD2_BW < GxEPD2_750, GxEPD2_750::HEIGHT / 2 > display(GxEPD2_750(/*CS=D8*/ SS
 // #define ENABLE_PRINT
 #ifndef ENABLE_PRINT
 // disable Serial output
-#define Serial SomeOtherwiseUnusedName
+#define Serial PlaceholderName
 static class {
 public:
     template<typename... T> 
@@ -40,11 +47,10 @@ const int httpsPort = 443;
 void showBitmapFrom_HTTPS(const char* host, const char* path, const char* filename, const char* fingerprint, const char* extra_headers, int16_t x, int16_t y, bool with_color = true);
 
 void setup() {
-  // SSID/Password lists
+  // SSID/Password lists (can contain multiple SSIDs to attempt)
   ssids[0] = SSID1;
   passwords[0] = PASS1;
-  
-  // put your setup code here, to run once:
+
   Serial.begin(115200);
   Serial.println();
   Serial.println("Tinker-Arduino started.");
@@ -54,10 +60,6 @@ void setup() {
   Serial.println("Clearing display...");
   display.clearScreen();
   Serial.println("Display cleared");
-
-  #if USE_BearSSL
-  Serial.println("bearssl");
-  #endif
 
   for (int i = 0; i < NUM_SSIDS; i++) {
     Serial.println();
@@ -113,19 +115,19 @@ void loop() {
     ESP.restart();
     return;
   }
-  
-  int16_t w2 = display.width() / 2;
-  int16_t h2 = display.height() / 2;
+
+  // Don't need to verify fingerprint, leave it blank
   showBitmapFrom_HTTPS("kevinniuwu.com", "/tinker/bmp", (String("/?tz=") + timezone).c_str(), 0, AUTH_HEADER, 0, 0);
   Serial.println("done");
-  
+
+  // Delay 500ms to prevent hibernation when screen is still refreshing, resulting in a black screen with partially white text
   delay(500);
   display.hibernate();
   
   delay(refreshInterval);
 }
 
-// ---------- BMP drawing code taken from https://github.com/ZinggJM/GxEPD2/blob/master/examples/GxEPD2_WiFi_Example/GxEPD2_WiFi_Example.ino ----------
+// ---------- BMP drawing code taken from https://github.com/ZinggJM/GxEPD2/blob/master/examples/GxEPD2_WiFi_Example/GxEPD2_WiFi_Example.ino, modified slightly by me ----------
 
 static const uint16_t input_buffer_pixels = 800; // may affect performance
 
@@ -147,6 +149,7 @@ void showBitmapFrom_HTTPS(const char* host, const char* path, const char* filena
   WiFiClientSecure client;
 #endif
 
+  // Don't verify fingerprint
   client.setInsecure();
   
   bool connection_ok = false;
@@ -391,6 +394,9 @@ void showBitmapFrom_HTTPS(const char* host, const char* path, const char* filena
   }
 }
 
+// Replace all client.read() in original with read8 because
+// server takes a long time to respond (pyppeteer takes time to screenshot)
+// Without it, image will appear shifted on display
 int read8(WiFiClient& client)
 {
   uint32_t start = millis();
