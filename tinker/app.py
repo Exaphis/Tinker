@@ -196,7 +196,8 @@ def index():
     task_service = googleapiclient.discovery.build('tasks', 'v1', credentials=credentials)
 
     task_list = task_service.tasklists().list(maxResults=1).execute().get('items', [])
-    data['tasks'] = []
+    due_tasks = []
+    undue_tasks = []
     if task_list:
         task_results = task_service.tasks().list(tasklist=task_list[0]['id'],
                                                  showCompleted=False).execute()
@@ -206,10 +207,14 @@ def index():
                 date = datetime.datetime.strptime(task['due'], '%Y-%m-%dT%H:%M:%S.000Z')
                 due_date = date.strftime('%b %d')
 
-                data['tasks'].append({'title': task['title'],
-                                      'due_date': due_date})
+                due_tasks.append({'title': task['title'],
+                                  'due_date': due_date,
+                                  'date': date})
             else:
-                data['tasks'].append({'title': task['title']})
+                undue_tasks.append({'title': task['title']})
+
+    due_tasks.sort(key=lambda x: x['date'])
+    data['tasks'] = due_tasks + undue_tasks
 
     return flask.render_template('index.html', **data)
 
