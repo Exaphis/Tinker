@@ -1,0 +1,19 @@
+[package]
+name = "tinker-rs"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+usvg = "0.35.0"
+resvg = "0.35.0"
+tiny-skia = "0.10"
+chrono = "0.4.26"
+chrono-tz = "0.8.3"
+serde = { version = "1.0.183", features = ["derive"] }
+reqwest = { version = "0.11.18", features = ["json"] }
+tokio = { version = "1.31.0", features = ["rt", "macros"] }
+roxmltree = "0.18.0"
+serde_json = "1.0.105"
+dotenv = "0.15.0"
