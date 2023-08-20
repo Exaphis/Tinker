@@ -1,7 +1,9 @@
-use std::path::Path;
+use std::io::Cursor;
+
+use image::{DynamicImage, ImageFormat};
+use worker::{wasm_bindgen::UnwrapThrowExt, *};
 
 use chrono::{TimeZone, Timelike};
-use dotenv::dotenv;
 use nj_transit::PARK_AVE_STOP;
 use usvg::{fontdb, NodeKind, NormalizedF32, Tree, TreeParsing, TreeTextToPath};
 
@@ -10,6 +12,9 @@ use crate::nj_transit::{StopArrival, BLVD_EAST_STOP};
 mod nj_transit;
 mod pirate_weather;
 
+const PIRATE_WEATHER_API_KEY: &str = "PIRATE_WEATHER_API_KEY";
+const TINKER_BUCKET: &str = "TINKER_BUCKET";
+
 struct WeatherForecast {
     temp: f64,
     high: f64,
@@ -17,7 +22,10 @@ struct WeatherForecast {
     hourly_precip: Vec<f64>,
 }
 
-async fn fetch_weather<Tz: TimeZone>(now: chrono::DateTime<Tz>) -> WeatherForecast {
+async fn fetch_weather<Tz: TimeZone>(
+    now: chrono::DateTime<Tz>,
+    env: Env,
+) -> Result<WeatherForecast> {
     // convert now to unix timestamp of the start of the day
     let now = now
         .with_hour(0)
@@ -29,14 +37,12 @@ async fn fetch_weather<Tz: TimeZone>(now: chrono::DateTime<Tz>) -> WeatherForeca
     let now = now.timestamp();
 
     let weather = pirate_weather::fetch_pirate_weather(
-        std::env::var("PIRATE_WEATHER_API_KEY")
-            .expect("PIRATE_WEATHER_API_KEY must be set.")
-            .as_str(),
-        40.776085,
-        -74.019334,
+        env.secret(PIRATE_WEATHER_API_KEY)?.to_string().as_str(),
+        40.774370,
+        -74.019892,
         now,
     )
-    .await;
+    .await?;
 
     for (i, forecast) in weather.hourly.data.iter().enumerate() {
         let diff = forecast.time - now;
@@ -51,7 +57,7 @@ async fn fetch_weather<Tz: TimeZone>(now: chrono::DateTime<Tz>) -> WeatherForeca
         .map(|f| f.temperature)
         .collect::<Vec<_>>();
 
-    WeatherForecast {
+    Ok(WeatherForecast {
         temp: weather.currently.temperature,
         high: hourly_temp
             .iter()
@@ -71,7 +77,7 @@ async fn fetch_weather<Tz: TimeZone>(now: chrono::DateTime<Tz>) -> WeatherForeca
             .collect::<Vec<_>>()
             .try_into()
             .unwrap(),
-    }
+    })
 }
 
 trait GetText {
@@ -94,11 +100,14 @@ impl GetText for Tree {
     }
 }
 
-async fn generate_tree<P: AsRef<Path>>(path: P, opt: usvg::Options) -> Tree {
+async fn generate_tree(svg_data: String, opt: usvg::Options, env: Env) -> Result<Tree> {
+    console_log!("get now");
     let now = chrono::Utc::now().with_timezone(&chrono_tz::US::Eastern);
-    let forecast = fetch_weather(now).await;
+    console_log!("get weather");
+    let forecast = fetch_weather(now, env).await?;
+    console_log!("get arrivals");
     let blvd_east_arrivals = nj_transit::get_arrival_details(BLVD_EAST_STOP)
-        .await
+        .await?
         .into_iter()
         .filter(|a| {
             a.route_number == 128
@@ -108,19 +117,21 @@ async fn generate_tree<P: AsRef<Path>>(path: P, opt: usvg::Options) -> Tree {
         })
         .collect::<Vec<_>>();
     let park_ave_arrivals = nj_transit::get_arrival_details(PARK_AVE_STOP)
-        .await
+        .await?
         .into_iter()
         .filter(|a| a.route_number == 156 || a.route_number == 89)
         .collect::<Vec<_>>();
 
     // get the percentage of the day that has passed
     let percent = now.time().num_seconds_from_midnight() as f32 / 86400.0;
-    let svg_data = std::fs::read_to_string(path).unwrap().replace(
+    let svg_data = svg_data.replace(
         "id=\"precip-time\" x=\"50%\"",
         format!("id=\"precip-time\" x=\"{}%\"", percent * 100.0).as_str(),
     );
 
+    console_log!("get tree");
     let mut tree = Tree::from_str(&svg_data, &opt).unwrap();
+    console_log!("modify text");
     tree.modify_node_text("text-time", |time| {
         // Format time as 12-hour clock with AM/PM
         time.chunks[0].text = now.format("%-I:%M %p").to_string().to_lowercase();
@@ -177,29 +188,79 @@ async fn generate_tree<P: AsRef<Path>>(path: P, opt: usvg::Options) -> Tree {
     set_stop_arrivals(&mut tree, "park", park_ave_arrivals);
     set_stop_arrivals(&mut tree, "blvd", blvd_east_arrivals);
 
-    tree
+    Ok(tree)
 }
 
-async fn get_tree() -> resvg::Tree {
+async fn get_tree(env: Env) -> Result<resvg::Tree> {
+    console_log!("in get_tree");
     let mut opt = usvg::Options::default();
     opt.shape_rendering = usvg::ShapeRendering::CrispEdges;
-    let mut tree = generate_tree("./template.svg", opt).await;
+    console_log!("call generate_tree");
+    let bucket = env.bucket(TINKER_BUCKET)?;
+    console_log!("bucket found, getting template data");
+    let svg_data = bucket
+        .get("template.svg")
+        .execute()
+        .await?
+        .expect_throw("svg object not found")
+        .body()
+        .expect_throw("svg body not found")
+        .text()
+        .await?;
+    let mut tree = generate_tree(svg_data, opt, env).await?;
+
+    async fn get_font_data(path: &str, bucket: &Bucket) -> Result<Vec<u8>> {
+        bucket
+            .get(path)
+            .execute()
+            .await?
+            .expect_throw("font object not found")
+            .body()
+            .expect_throw("font body not found")
+            .bytes()
+            .await
+    }
+
+    console_log!("gen fonts");
     let mut fontdb = fontdb::Database::new();
-    fontdb.load_font_file("./BebasNeue-Regular.ttf").unwrap();
-    fontdb.load_font_file("./Louis George Cafe.ttf").unwrap();
-    fontdb
-        .load_font_file("./Louis George Cafe Bold.ttf")
-        .unwrap();
+    fontdb.load_font_data(get_font_data("fonts/BebasNeue-Regular.ttf", &bucket).await?);
+    fontdb.load_font_data(get_font_data("fonts/Louis George Cafe.ttf", &bucket).await?);
+    fontdb.load_font_data(get_font_data("fonts/Louis George Cafe Bold.ttf", &bucket).await?);
     tree.convert_text(&fontdb);
-    resvg::Tree::from_usvg(&tree)
+    Ok(resvg::Tree::from_usvg(&tree))
 }
 
-#[tokio::main(flavor = "current_thread")]
-async fn main() {
-    dotenv().ok();
-    let rtree = get_tree().await;
+#[event(fetch)]
+async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
+    if !matches!(req.method(), Method::Get) {
+        return Response::error("Method Not Allowed", 405);
+    }
+    console_log!("{}: in main", req.path());
+    if req.path() != "/" {
+        return Response::error("Not Found", 404);
+    }
+
+    let rtree = get_tree(env).await?;
+    console_log!("got tree");
     let pixmap_size = rtree.size.to_int_size();
-    let mut pixmap = tiny_skia::Pixmap::new(pixmap_size.width(), pixmap_size.height()).unwrap();
+    let mut pixmap = tiny_skia::Pixmap::new(pixmap_size.width(), pixmap_size.height())
+        .expect_throw("failed to create pixmap");
     rtree.render(tiny_skia::Transform::default(), &mut pixmap.as_mut());
-    pixmap.save_png("out.png").unwrap();
+
+    // convert pixmap to bmp for output to arduino
+    let img_buf = image::ImageBuffer::<image::Rgba<u8>, Vec<u8>>::from_raw(
+        pixmap_size.width() as u32,
+        pixmap_size.height() as u32,
+        pixmap.data().to_vec(),
+    )
+    .expect_throw("failed to create image buffer");
+    let mut buffer = Cursor::new(vec![]);
+    let img_buf = DynamicImage::ImageRgba8(img_buf).into_luma8();
+    img_buf
+        .write_to(&mut buffer, ImageFormat::Bmp)
+        .expect_throw("failed to write bmp");
+
+    let mut headers = Headers::new();
+    headers.set("Content-Type", "image/bmp")?;
+    Ok(Response::from_body(ResponseBody::Body(buffer.into_inner()))?.with_headers(headers))
 }

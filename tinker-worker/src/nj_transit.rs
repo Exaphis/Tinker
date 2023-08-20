@@ -1,6 +1,6 @@
-// https://mybusnow.njtransit.com/bustime/eta/getStopPredictionsETA.jsp?agency=&route=all&stop=31497
 use chrono::TimeZone;
 use serde::Deserialize;
+use worker::{Request, Result};
 
 pub const PARK_AVE_STOP: u32 = 31497;
 pub const BLVD_EAST_STOP: u32 = 21824;
@@ -51,29 +51,22 @@ struct NJTStopArrival {
     zone: String,
 }
 
-pub async fn get_arrival_details(stop_id: u32) -> Vec<StopArrival> {
+pub async fn get_arrival_details(stop_id: u32) -> Result<Vec<StopArrival>> {
     let url = format!(
         "https://app.njtransit.com/NJTAppWS4/services/getMBNPredictions?stopid={}",
         stop_id
     );
 
-    let client = reqwest::Client::builder()
-        .user_agent("okhttp/4.10.0")
-        .build()
+    let mut req = Request::new(&url, worker::Method::Get)?;
+    req.headers_mut()?
+        .set("Authorization", "Basic bmp0YXBwOjhyZzNyWDhH")
         .unwrap();
-    let resp = client
-        .get(&url)
-        .basic_auth("njtapp", Some("8rg3rX8G"))
-        .send()
-        .await
-        .unwrap();
-    let text = resp.text().await.unwrap();
+
+    let text = worker::Fetch::Request(req).send().await?.text().await?;
     let text = text.strip_prefix("callback(").unwrap();
     let text = text.strip_suffix(")").unwrap();
     let arrivals: Vec<NJTStopArrival> = serde_json::from_str(text).unwrap_or(vec![]);
-    // sleep for 1 second to avoid rate limiting
-    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-    arrivals
+    Ok(arrivals
         .into_iter()
         .map(|a| {
             let arrival_time =
@@ -86,5 +79,5 @@ pub async fn get_arrival_details(stop_id: u32) -> Vec<StopArrival> {
                 arrival_time: arrival_time,
             }
         })
-        .collect()
+        .collect())
 }

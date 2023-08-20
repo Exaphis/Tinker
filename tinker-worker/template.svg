@@ -131,19 +131,19 @@
         <path class="cls-15" d="m365.52,136.99h129.91v28.7c0,10.94-8.88,19.83-19.83,19.83h-110.09v-48.52h0Z"/>
         <path class="cls-10" d="m306.57,136.99h188.87v28.7c0,10.94-8.88,19.83-19.83,19.83h-187.3v-30.26c0-10.08,8.18-18.26,18.26-18.26Z"/>
         <text id="blvd-2-route" class="cls-13" transform="translate(295.35 174.16)"><tspan x="0" y="0">168</tspan></text>
-        <text id="blvd-2-time" class="cls-4" text-anchor="end" transform="translate(480 174.16)"><tspan x="0" y="0">4:35 pm</tspan></text>
+        <text id="blvd-2-time" class="cls-4" text-anchor="end" transform="translate(480 174.16)"><tspan x="0" y="0">14:35 pm</tspan></text>
       </g>
       <g id="blvd-3">
         <path class="cls-15" d="m365.52,201.67h129.91v28.7c0,10.94-8.88,19.83-19.83,19.83h-110.09v-48.52h0Z"/>
         <path class="cls-10" d="m306.57,201.67h188.87v28.7c0,10.94-8.88,19.83-19.83,19.83h-187.3v-30.26c0-10.08,8.18-18.26,18.26-18.26Z"/>
         <text id="blvd-3-route" class="cls-13" transform="translate(295.35 238.85)"><tspan x="0" y="0">128</tspan></text>
-        <text id="blvd-3-time" class="cls-4" text-anchor="end" transform="translate(480 238.85)"><tspan x="0" y="0">4:35 pm</tspan></text>
+        <text id="blvd-3-time" class="cls-4" text-anchor="end" transform="translate(480 238.85)"><tspan x="0" y="0">14:35 pm</tspan></text>
       </g>
       <g id="blvd-4">
         <path class="cls-15" d="m365.52,266.36h129.91v28.7c0,10.94-8.88,19.83-19.83,19.83h-110.09v-48.52h0Z"/>
         <path class="cls-10" d="m306.57,266.36h188.87v28.7c0,10.94-8.88,19.83-19.83,19.83h-187.3v-30.26c0-10.08,8.18-18.26,18.26-18.26Z"/>
         <text id="blvd-4-route" class="cls-13" transform="translate(295.35 303.53)"><tspan x="0" y="0">166</tspan></text>
-        <text id="blvd-4-time"  class="cls-4" text-anchor="end" transform="translate(480 303.53)"><tspan x="0" y="0">4:35 pm</tspan></text>
+        <text id="blvd-4-time"  class="cls-4" text-anchor="end" transform="translate(480 303.53)"><tspan x="0" y="0">14:35 pm</tspan></text>
       </g>
     </g>
     <line class="cls-1" x1="261.74" y1="21.7" x2="261.74" y2="314.88"/>
