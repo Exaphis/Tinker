@@ -39,12 +39,15 @@ const char* passwords[NUM_SSIDS];
 
 const unsigned long refreshInterval = 60UL * 60UL * 1000UL;  // 1 hour
 
-const char* timezone = "America/Los_Angeles";
+const char* timezone = "America/New_York";
 
 const int httpPort  = 80;
 const int httpsPort = 443;
 
 void showBitmapFrom_HTTPS(const char* host, const char* path, const char* filename, const char* fingerprint, const char* extra_headers, int16_t x, int16_t y, bool with_color = true);
+int read8(WiFiClient& client);
+uint16_t read16(WiFiClient& client);
+uint32_t read32(WiFiClient& client);
 
 void setup() {
   // SSID/Password lists (can contain multiple SSIDs to attempt)
