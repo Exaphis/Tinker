@@ -1,6 +1,6 @@
-use std::io::Cursor;
+use std::collections::HashMap;
 
-use image::{DynamicImage, ImageFormat};
+use tiny_skia::Pixmap;
 use worker::{wasm_bindgen::UnwrapThrowExt, *};
 
 use chrono::{TimeZone, Timelike};
@@ -14,7 +14,12 @@ mod pirate_weather;
 
 const PIRATE_WEATHER_API_KEY: &str = "PIRATE_WEATHER_API_KEY";
 const TINKER_BUCKET: &str = "TINKER_BUCKET";
+const WEATHER_LAT: f64 = 40.774370;
+const WEATHER_LONG: f64 = -74.019892;
+// cache weather data for 10 minutes to limit API calls to < 5000 per month
+const WEATHER_EXPIRY_SECS: i64 = 600;
 
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
 struct WeatherForecast {
     temp: f64,
     high: f64,
@@ -27,25 +32,50 @@ async fn fetch_weather<Tz: TimeZone>(
     env: Env,
 ) -> Result<WeatherForecast> {
     // convert now to unix timestamp of the start of the day
-    let now = now
+    let sod = now
         .with_hour(0)
         .unwrap()
         .with_minute(0)
         .unwrap()
         .with_second(0)
-        .unwrap();
-    let now = now.timestamp();
+        .unwrap()
+        .timestamp();
+
+    const METADATA_START_OF_DAY: &str = "start_of_day";
+    const METADATA_EXPIRY: &str = "expiry";
+
+    let bucket = env.bucket(TINKER_BUCKET)?;
+    // check for cached weather data in the bucket
+    if let Some(obj) = bucket.get("weather.json").execute().await? {
+        let metadata = obj.custom_metadata()?;
+        let expiry = metadata
+            .get(METADATA_EXPIRY)
+            .expect_throw("expiry not found");
+        let expiry = expiry.parse::<i64>().expect_throw("expiry not a number");
+
+        // if unexpired, return the cached data
+        if expiry >= now.timestamp()
+            && metadata.get(METADATA_START_OF_DAY) == Some(&sod.to_string())
+        {
+            console_log!("weather cache hit");
+            let obj = obj.body().expect_throw("weather body not found");
+            let obj = obj.text().await?;
+            let obj: WeatherForecast = serde_json::from_str(obj.as_str())?;
+            return Ok(obj);
+        }
+    }
+    console_log!("weather cache miss");
 
     let weather = pirate_weather::fetch_pirate_weather(
         env.secret(PIRATE_WEATHER_API_KEY)?.to_string().as_str(),
-        40.774370,
-        -74.019892,
-        now,
+        WEATHER_LAT,
+        WEATHER_LONG,
+        sod,
     )
     .await?;
 
     for (i, forecast) in weather.hourly.data.iter().enumerate() {
-        let diff = forecast.time - now;
+        let diff = forecast.time - sod;
         let hours = diff / 3600;
         assert!(hours == i as i64);
     }
@@ -57,7 +87,7 @@ async fn fetch_weather<Tz: TimeZone>(
         .map(|f| f.temperature)
         .collect::<Vec<_>>();
 
-    Ok(WeatherForecast {
+    let res = WeatherForecast {
         temp: weather.currently.temperature,
         high: hourly_temp
             .iter()
@@ -77,7 +107,23 @@ async fn fetch_weather<Tz: TimeZone>(
             .collect::<Vec<_>>()
             .try_into()
             .unwrap(),
-    })
+    };
+
+    // cache the weather data in the bucket for 1 hour
+    let metadata = HashMap::from([
+        (
+            METADATA_EXPIRY.to_string(),
+            (now.timestamp() + WEATHER_EXPIRY_SECS).to_string(),
+        ),
+        (METADATA_START_OF_DAY.to_string(), sod.to_string()),
+    ]);
+    bucket
+        .put("weather.json", serde_json::to_string(&res)?)
+        .custom_metdata(metadata)
+        .execute()
+        .await?;
+
+    Ok(res)
 }
 
 trait GetText {
@@ -230,37 +276,55 @@ async fn get_tree(env: Env) -> Result<resvg::Tree> {
     Ok(resvg::Tree::from_usvg(&tree))
 }
 
-#[event(fetch)]
-async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
-    if !matches!(req.method(), Method::Get) {
-        return Response::error("Method Not Allowed", 405);
-    }
-    console_log!("{}: in main", req.path());
-    if req.path() != "/" {
-        return Response::error("Not Found", 404);
-    }
-
+async fn get_pixmap(env: Env) -> Result<Pixmap> {
     let rtree = get_tree(env).await?;
     console_log!("got tree");
     let pixmap_size = rtree.size.to_int_size();
     let mut pixmap = tiny_skia::Pixmap::new(pixmap_size.width(), pixmap_size.height())
         .expect_throw("failed to create pixmap");
     rtree.render(tiny_skia::Transform::default(), &mut pixmap.as_mut());
+    Ok(pixmap)
+}
 
-    // convert pixmap to bmp for output to arduino
-    let img_buf = image::ImageBuffer::<image::Rgba<u8>, Vec<u8>>::from_raw(
-        pixmap_size.width() as u32,
-        pixmap_size.height() as u32,
-        pixmap.data().to_vec(),
-    )
-    .expect_throw("failed to create image buffer");
-    let mut buffer = Cursor::new(vec![]);
-    let img_buf = DynamicImage::ImageRgba8(img_buf).into_luma8();
-    img_buf
-        .write_to(&mut buffer, ImageFormat::Bmp)
-        .expect_throw("failed to write bmp");
+async fn route_img(env: Env) -> Result<Response> {
+    // return the image as a png
+    let pixmap = get_pixmap(env).await?;
 
+    let data = pixmap.encode_png().map_err(|_| "failed to encode png")?;
     let mut headers = Headers::new();
-    headers.set("Content-Type", "image/bmp")?;
-    Ok(Response::from_body(ResponseBody::Body(buffer.into_inner()))?.with_headers(headers))
+    headers.set("Content-Type", "image/png")?;
+    Ok(Response::from_body(ResponseBody::Body(data))?.with_headers(headers))
+}
+
+async fn route_raw(env: Env) -> Result<Response> {
+    // return the image as raw bytes (1 byte per pixel)
+    let pixmap = get_pixmap(env).await?;
+    let data: Vec<u8> = pixmap
+        .pixels()
+        .into_iter()
+        .map(|pixel| {
+            if pixel.red() != 0 || pixel.green() != 0 || pixel.blue() != 0 {
+                1
+            } else {
+                0
+            }
+        })
+        .collect::<Vec<_>>();
+    Ok(Response::from_bytes(data)?)
+}
+
+#[event(fetch)]
+async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
+    if !matches!(req.method(), Method::Get) {
+        return Response::error("Method Not Allowed", 405);
+    }
+    console_log!("{}: in main", req.path());
+    if req.path() == "/img" {
+        return route_img(env).await;
+    }
+    if req.path() == "/raw" {
+        return route_raw(env).await;
+    }
+
+    Response::error("Not Found", 404)
 }

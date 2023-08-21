@@ -20,7 +20,7 @@
       }
 
       .cls-1, .cls-10 {
-        stroke: #231f20;
+        stroke: #000;
       }
 
       .cls-1, .cls-10, .cls-11 {
