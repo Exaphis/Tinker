@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use bitvec::vec::BitVec;
 use tiny_skia::Pixmap;
 use worker::{wasm_bindgen::UnwrapThrowExt, *};
 
@@ -299,18 +300,22 @@ async fn route_img(env: Env) -> Result<Response> {
 async fn route_raw(env: Env) -> Result<Response> {
     // return the image as raw bytes (1 byte per pixel)
     let pixmap = get_pixmap(env).await?;
-    let data: Vec<u8> = pixmap
+    let data: BitVec<u8> = pixmap
         .pixels()
         .into_iter()
         .map(|pixel| {
             if pixel.red() != 0 || pixel.green() != 0 || pixel.blue() != 0 {
-                1
+                true
             } else {
-                0
+                false
             }
         })
-        .collect::<Vec<_>>();
-    Ok(Response::from_bytes(data)?)
+        .collect();
+    let (_, body, tail) = data.domain().region().unwrap();
+    if tail.is_some() {
+        panic!("pixmap size is not a multiple of 8");
+    }
+    Ok(Response::from_bytes(body.to_vec())?)
 }
 
 #[event(fetch)]
