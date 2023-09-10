@@ -1,14 +1,17 @@
-# Tinker (Task inker)
-Internet-connected Arduino e-ink task display. 
+# Tinker
 
-## Overview
-This project combines a Flask server and a ESP8266 connected to Waveshare 7.5in e-paper display to show the date, weather, and your upcoming tasks at a glance.
+An internet-connected Arduino e-ink display
 
-Tinker uses the Dark Sky API to gather weather information and the Google Calendar/Google Tasks API to get your tasks.
+Tinker combines a Cloudflare worker and a Waveshare 7.5in 800x480 e-ink display
+to create a dashboard for time, weather, and bus arrival information.
 
-<!--
-    Ashley was here.
--->
+## Details
 
-## Completed Example
-![Example](https://raw.githubusercontent.com/Exaphis/Tinker/master/example.jpg)
+For more information on how it works, view:
+
+1. [the Cloudflare worker's README](tinker-worker/README.md)
+2. [the Arduino's README](tinker-arduino/README.md)
+
+## Example
+
+![Example of the completed display in a picture frame](example.jpg)

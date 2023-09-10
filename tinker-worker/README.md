@@ -7,7 +7,8 @@ Cloudflare worker that generates bitmap images to display on a 800x480 screen.
 Images are generated from a template SVG file using [resvg](https://github.com/RazrFalcon/resvg).
 
 Weather data shown on the bitmap is gathered from [Pirate Weather](http://pirateweather.net/).
-Bus arrival times are gathered from the NJ Transit API (reverse engineered from the Android app).
+Bus arrival times are gathered from the NJ Transit API
+(reverse engineered from the Android app).
 
 ## Setup
 
