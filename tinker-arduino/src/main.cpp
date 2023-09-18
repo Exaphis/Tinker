@@ -5,7 +5,7 @@
 
 #include "secrets.h"
 
-#define ENABLE_PRINT
+// #define ENABLE_PRINT
 #ifndef ENABLE_PRINT
 // disable Serial output
 #define Serial PlaceholderName
@@ -16,16 +16,23 @@ static class {
     template <typename... T>
     void print(T...) {}
     template <typename... T>
+    void printf(T...) {}
+    template <typename... T>
     void println(T...) {}
 } Serial;
 #endif
 
-GxEPD2_BW < GxEPD2_750_T7, GxEPD2_750_T7::HEIGHT / 4 > display(GxEPD2_750_T7(/*CS=D8*/ SS, /*DC=D3*/ 0, /*RST=D4*/ 2, /*BUSY=D2*/ 4)); // GDEW075T7 800x480, EK79655 (GD7965)
+// No need for paged display, set the page height to 1 to avoid extra RAM usage
+GxEPD2_BW<GxEPD2_750_T7, 1> display(GxEPD2_750_T7(/*CS=D8*/ SS, /*DC=D3*/ 0, /*RST=D4*/ 2, /*BUSY=D2*/ 4)); // GDEW075T7 800x480, EK79655 (GD7965)
 const size_t BUF_LEN = GxEPD2_750_T7::WIDTH / 8;
 uint8_t row_buf[BUF_LEN];
 
-const unsigned long REFRESH_INTERVAL_MS = 60UL * 1000UL;
+const unsigned long REFRESH_INTERVAL_MS = 180UL * 1000UL;
 const unsigned int WIFI_TIMEOUT_SEC = 30;
+// max number of refreshes before clearing screen
+const unsigned int MAX_REFRESH_COUNT = 5;  
+
+uint8_t refresh_count = 0;
 
 void show_raw_bitmap(void);
 
@@ -65,11 +72,7 @@ void setup() {
     Serial.print("IP address: ");
     Serial.println(WiFi.localIP());
     
-    display.init(115200, true, 2, false);
-
-    Serial.println("Clearing display...");
-    display.clearScreen();
-    Serial.println("Display cleared");
+    display.init(115200);
 }
 
 void loop() {
@@ -78,13 +81,22 @@ void loop() {
         return;
     }
 
+    if (refresh_count == 0) {
+        Serial.println("Clearing display...");
+        display.clearScreen();
+        display.refresh();
+        Serial.println("Display cleared");
+    }
+
     Serial.println("displaying image...");
     show_raw_bitmap();
-    Serial.println("done one display");
+    Serial.printf("done one display, refresh count=%d\n", refresh_count);
 
-    // Delay 500ms to prevent hibernation when screen is still refreshing, resulting in a black screen with partially white text
-    delay(500);
-    display.hibernate();
+    // Power off display to avoid burn-in
+    // See https://www.waveshare.com/wiki/7.5inch_e-Paper_HAT_Manual#Precautions
+    // Cannot use display.hibernate() because it will lose previous image,
+    // preventing fast partial refresh
+    display.powerOff();
     delay(REFRESH_INTERVAL_MS);
 }
 
@@ -144,12 +156,14 @@ void show_raw_bitmap() {
     }
 
     Serial.println("Reading image data...");
-    display.clearScreen();
     for (int row = 0; row < display.height(); row++) {
         if (!display_row(http, client, row)) {
             break;
         }
     }
     Serial.println("Done reading image data");
-    display.refresh();
+    // Do a fast refresh to avoid flickering when the screen is updated
+    display.refresh(true);
+    refresh_count++;
+    refresh_count %= MAX_REFRESH_COUNT;
 }
