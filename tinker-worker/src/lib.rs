@@ -17,8 +17,8 @@ const PIRATE_WEATHER_API_KEY: &str = "PIRATE_WEATHER_API_KEY";
 const TINKER_BUCKET: &str = "TINKER_BUCKET";
 const WEATHER_LAT: f64 = 40.774370;
 const WEATHER_LONG: f64 = -74.019892;
-// cache weather data for 10 minutes to limit API calls to < 5000 per month
-const WEATHER_EXPIRY_SECS: i64 = 600;
+// cache weather data for 30 minutes to limit API calls to < 5000 per month
+const WEATHER_EXPIRY_SECS: i64 = 1800;
 
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
 struct WeatherForecast {
@@ -67,13 +67,21 @@ async fn fetch_weather<Tz: TimeZone>(
     }
     console_log!("weather cache miss");
 
-    let weather = pirate_weather::fetch_pirate_weather(
+    let mut weather = pirate_weather::fetch_pirate_weather(
         env.secret(PIRATE_WEATHER_API_KEY)?.to_string().as_str(),
         WEATHER_LAT,
         WEATHER_LONG,
         sod,
     )
     .await?;
+
+    // update the actual current weather
+    weather.currently = pirate_weather::fetch_pirate_weather(
+        env.secret(PIRATE_WEATHER_API_KEY)?.to_string().as_str(),
+        WEATHER_LAT,
+        WEATHER_LONG,
+        now.timestamp(),
+    ).await?.currently;
 
     for (i, forecast) in weather.hourly.data.iter().enumerate() {
         let diff = forecast.time - sod;
