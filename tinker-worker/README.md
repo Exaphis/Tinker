@@ -20,7 +20,7 @@ Bus arrival times are gathered from the NJ Transit API
 5. Add `PIRATE_WEATHER_API_KEY=<key>` to `.dev.vars`.
    * Set the API key for the Pirate Weather API in development.
 6. `npx wrangler secret put PIRATE_WEATHER_API_KEY`
-   * Set the API key for the Pirate Weather API in productino.
+   * Set the API key for the Pirate Weather API in production.
 
 ## Usage
 
