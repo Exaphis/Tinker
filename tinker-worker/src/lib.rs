@@ -128,7 +128,7 @@ async fn fetch_weather<Tz: TimeZone>(
     ]);
     bucket
         .put("weather.json", serde_json::to_string(&res)?)
-        .custom_metdata(metadata)
+        .custom_metadata(metadata)
         .execute()
         .await?;
 
