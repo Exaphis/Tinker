@@ -11,3 +11,6 @@ command = "cargo install -q worker-build && worker-build --release"
 binding = "TINKER_BUCKET"
 bucket_name = "tinker-worker-bucket"
 preview_bucket_name = "tinker-worker-bucket-dev"
+
+[observability]
+enabled = true

@@ -328,14 +328,14 @@ async fn route_raw(env: Env) -> Result<Response> {
 
 #[event(fetch)]
 async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
+    console_log!("{}: in main", req.path());
     if !matches!(req.method(), Method::Get) {
         return Response::error("Method Not Allowed", 405);
     }
-    console_log!("{}: in main", req.path());
     if req.path() == "/img" {
         return route_img(env).await;
     }
-    if req.path() == "/raw" {
+    else if req.path() == "/raw" {
         return route_raw(env).await;
     }
 
