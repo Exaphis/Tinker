@@ -38,7 +38,7 @@ struct CachedWeatherForecast {
 
 async fn fetch_weather<Tz: TimeZone>(
     now: chrono::DateTime<Tz>,
-) -> WeatherForecast {
+) -> Result<WeatherForecast, Box<dyn std::error::Error>> {
     // convert now to unix timestamp of the start of the day
     let sod = now
         .with_hour(0)
@@ -57,7 +57,7 @@ async fn fetch_weather<Tz: TimeZone>(
                 && cached.start_of_day == sod
             {
                 info!("weather cache hit");
-                return cached.weather;
+                return Ok(cached.weather);
             }
         }
     }
@@ -69,8 +69,7 @@ async fn fetch_weather<Tz: TimeZone>(
         WEATHER_LONG,
         sod,
     )
-    .await
-    .unwrap();
+    .await?;
 
     // update the actual current weather
     weather.currently = pirate_weather::fetch_pirate_weather(
@@ -78,7 +77,7 @@ async fn fetch_weather<Tz: TimeZone>(
         WEATHER_LAT,
         WEATHER_LONG,
         now.timestamp(),
-    ).await.unwrap().currently;
+    ).await?.currently;
 
     for (i, forecast) in weather.hourly.data.iter().enumerate() {
         let diff = forecast.time - sod;
@@ -122,9 +121,9 @@ async fn fetch_weather<Tz: TimeZone>(
         start_of_day: sod,
     };
     info!("caching weather data: {:?}", cached);
-    let json_str = serde_json::to_string(&cached).unwrap();
-    tokio::fs::write("data/weather.json", json_str).await.unwrap();
-    res
+    let json_str = serde_json::to_string(&cached)?;
+    tokio::fs::write("data/weather.json", json_str).await?;
+    Ok(res)
 }
 
 trait GetText {
@@ -147,15 +146,14 @@ impl GetText for Tree {
     }
 }
 
-async fn generate_tree(svg_data: String, opt: usvg::Options) -> Tree {
+async fn generate_tree(svg_data: String, opt: usvg::Options) -> Result<Tree, Box<dyn std::error::Error>> {
     info!("get now");
     let now = chrono::Utc::now().with_timezone(&chrono_tz::US::Eastern);
     info!("get weather");
-    let forecast = fetch_weather(now).await;
+    let forecast = fetch_weather(now).await?;
     info!("get arrivals");
     let blvd_east_arrivals = nj_transit::get_arrival_details(BLVD_EAST_STOP)
-        .await
-        .unwrap()
+        .await?
         .into_iter()
         .filter(|a| {
             a.route_number == 128
@@ -165,8 +163,7 @@ async fn generate_tree(svg_data: String, opt: usvg::Options) -> Tree {
         })
         .collect::<Vec<_>>();
     let park_ave_arrivals = nj_transit::get_arrival_details(PARK_AVE_STOP)
-        .await
-        .unwrap()
+        .await?
         .into_iter()
         .filter(|a| a.route_number == 156 || a.route_number == 89)
         .collect::<Vec<_>>();
@@ -179,7 +176,7 @@ async fn generate_tree(svg_data: String, opt: usvg::Options) -> Tree {
     );
 
     info!("get tree");
-    let mut tree = Tree::from_str(&svg_data, &opt).unwrap();
+    let mut tree = Tree::from_str(&svg_data, &opt)?;
     info!("modify text");
     tree.modify_node_text("text-time", |time| {
         // Format time as 12-hour clock with AM/PM
@@ -237,47 +234,47 @@ async fn generate_tree(svg_data: String, opt: usvg::Options) -> Tree {
     set_stop_arrivals(&mut tree, "park", park_ave_arrivals);
     set_stop_arrivals(&mut tree, "blvd", blvd_east_arrivals);
 
-    tree
+    Ok(tree)
 }
 
-async fn get_tree() -> resvg::Tree {
+async fn get_tree() -> Result<resvg::Tree, Box<dyn std::error::Error>> {
     info!("in get_tree");
     let mut opt = usvg::Options::default();
     opt.shape_rendering = usvg::ShapeRendering::CrispEdges;
     info!("call generate_tree");
     info!("bucket found, getting template data");
-    let svg_data = tokio::fs::read_to_string("data/template.svg").await.unwrap();
-    let mut tree = generate_tree(svg_data, opt).await;
+    let svg_data = tokio::fs::read_to_string("data/template.svg").await?;
+    let mut tree = generate_tree(svg_data, opt).await?;
 
     info!("gen fonts");
     let mut fontdb = fontdb::Database::new();
-    fontdb.load_font_data(tokio::fs::read("data/fonts/BebasNeue-Regular.ttf").await.unwrap());
-    fontdb.load_font_data(tokio::fs::read("data/fonts/Louis George Cafe.ttf").await.unwrap());
-    fontdb.load_font_data(tokio::fs::read("data/fonts/Louis George Cafe Bold.ttf").await.unwrap());
+    fontdb.load_font_data(tokio::fs::read("data/fonts/BebasNeue-Regular.ttf").await?);
+    fontdb.load_font_data(tokio::fs::read("data/fonts/Louis George Cafe.ttf").await?);
+    fontdb.load_font_data(tokio::fs::read("data/fonts/Louis George Cafe Bold.ttf").await?);
     tree.convert_text(&fontdb);
-    resvg::Tree::from_usvg(&tree)
+    Ok(resvg::Tree::from_usvg(&tree))
 }
 
-pub async fn get_pixmap() -> Pixmap {
-    let rtree = get_tree().await;
+pub async fn get_pixmap() -> Result<Pixmap, Box<dyn std::error::Error>> {
+    let rtree = get_tree().await?;
     info!("got tree");
     let pixmap_size = rtree.size.to_int_size();
     let mut pixmap = tiny_skia::Pixmap::new(pixmap_size.width(), pixmap_size.height()).unwrap();
     rtree.render(tiny_skia::Transform::default(), &mut pixmap.as_mut());
-    pixmap
+    Ok(pixmap)
 }
 
-pub async fn gen_img() -> Vec<u8> {
+pub async fn gen_img() -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     // return the image as a png
-    let pixmap = get_pixmap().await;
+    let pixmap = get_pixmap().await?;
 
-    let data = pixmap.encode_png().unwrap();
-    data
+    let data = pixmap.encode_png()?;
+    Ok(data)
 }
 
-pub async fn gen_raw() -> Vec<u8> {
+pub async fn gen_raw() -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     // return the image as raw bytes (1 byte per pixel)
-    let pixmap = get_pixmap().await;
+    let pixmap = get_pixmap().await?;
     let data: BitVec<u8> = pixmap
         .pixels()
         .into_iter()
@@ -293,5 +290,5 @@ pub async fn gen_raw() -> Vec<u8> {
     if tail.is_some() {
         panic!("pixmap size is not a multiple of 8");
     }
-    body.to_vec()
+    Ok(body.to_vec())
 }
