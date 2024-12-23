@@ -1,5 +1,4 @@
 use serde::Deserialize;
-use worker::{Request, Result};
 
 #[derive(Deserialize, Debug)]
 #[allow(dead_code)]
@@ -36,11 +35,13 @@ pub async fn fetch_pirate_weather(
     lat: f64,
     long: f64,
     timestamp: i64,
-) -> Result<PirateForecast> {
+) -> Result<PirateForecast, Box<dyn std::error::Error>> {
     let url = format!(
         "https://api.pirateweather.net/forecast/{}/{},{},{}?exclude=minutely,daily",
         api_key, lat, long, timestamp
     );
-    let req = Request::new(&url, worker::Method::Get)?;
-    worker::Fetch::Request(req).send().await?.json().await
+    let client = reqwest::Client::new();
+    let response = client.get(&url).send().await?;
+    let forecast = response.json::<PirateForecast>().await?;
+    Ok(forecast)
 }

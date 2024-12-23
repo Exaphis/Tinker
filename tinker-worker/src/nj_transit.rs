@@ -1,6 +1,5 @@
 use chrono::TimeZone;
 use serde::Deserialize;
-use worker::{Request, Result};
 
 pub const PARK_AVE_STOP: u32 = 31497;
 pub const BLVD_EAST_STOP: u32 = 21824;
@@ -51,18 +50,21 @@ struct NJTStopArrival {
     zone: String,
 }
 
-pub async fn get_arrival_details(stop_id: u32) -> Result<Vec<StopArrival>> {
+pub async fn get_arrival_details(stop_id: u32) -> Result<Vec<StopArrival>, Box<dyn std::error::Error>> {
     let url = format!(
         "https://app.njtransit.com/NJTAppWS4/services/getMBNPredictions?stopid={}",
         stop_id
     );
 
-    let mut req = Request::new(&url, worker::Method::Get)?;
-    req.headers_mut()?
-        .set("Authorization", "Basic bmp0YXBwOjhyZzNyWDhH")
-        .unwrap();
+    let client = reqwest::Client::new();
+    let text = client
+        .get(&url)
+        .header("Authorization", "Basic bmp0YXBwOjhyZzNyWDhH")
+        .send()
+        .await?
+        .text()
+        .await?;
 
-    let text = worker::Fetch::Request(req).send().await?.text().await?;
     let text = text.strip_prefix("callback(").unwrap();
     let text = text.strip_suffix(")").unwrap();
     let arrivals: Vec<NJTStopArrival> = serde_json::from_str(text).unwrap_or(vec![]);

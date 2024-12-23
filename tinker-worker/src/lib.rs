@@ -1,8 +1,7 @@
-use std::collections::HashMap;
+use log::info;
 
 use bitvec::vec::BitVec;
 use tiny_skia::Pixmap;
-use worker::{wasm_bindgen::UnwrapThrowExt, *};
 
 use chrono::{TimeZone, Timelike};
 use nj_transit::PARK_AVE_STOP;
@@ -13,14 +12,16 @@ use crate::nj_transit::{StopArrival, BLVD_EAST_STOP};
 mod nj_transit;
 mod pirate_weather;
 
-const PIRATE_WEATHER_API_KEY: &str = "PIRATE_WEATHER_API_KEY";
-const TINKER_BUCKET: &str = "TINKER_BUCKET";
 const WEATHER_LAT: f64 = 40.774370;
 const WEATHER_LONG: f64 = -74.019892;
 // cache weather data for 30 minutes to limit API calls to < 5000 per month
 const WEATHER_EXPIRY_SECS: i64 = 1800;
 
-#[derive(Debug, serde::Deserialize, serde::Serialize)]
+fn get_pirate_weather_api_key() -> String {
+    std::env::var("PIRATE_WEATHER_API_KEY").expect("PIRATE_WEATHER_API_KEY not set")
+}
+
+#[derive(Debug, serde::Deserialize, serde::Serialize, Clone)]
 struct WeatherForecast {
     temp: f64,
     high: f64,
@@ -28,10 +29,16 @@ struct WeatherForecast {
     hourly_precip: Vec<f64>,
 }
 
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
+struct CachedWeatherForecast {
+    weather: WeatherForecast,
+    expiry: i64,
+    start_of_day: i64,
+}
+
 async fn fetch_weather<Tz: TimeZone>(
     now: chrono::DateTime<Tz>,
-    env: Env,
-) -> Result<WeatherForecast> {
+) -> WeatherForecast {
     // convert now to unix timestamp of the start of the day
     let sod = now
         .with_hour(0)
@@ -42,46 +49,36 @@ async fn fetch_weather<Tz: TimeZone>(
         .unwrap()
         .timestamp();
 
-    const METADATA_START_OF_DAY: &str = "start_of_day";
-    const METADATA_EXPIRY: &str = "expiry";
-
-    let bucket = env.bucket(TINKER_BUCKET)?;
     // check for cached weather data in the bucket
-    if let Some(obj) = bucket.get("weather.json").execute().await? {
-        let metadata = obj.custom_metadata()?;
-        let expiry = metadata
-            .get(METADATA_EXPIRY)
-            .expect_throw("expiry not found");
-        let expiry = expiry.parse::<i64>().expect_throw("expiry not a number");
-
-        // if unexpired, return the cached data
-        if expiry >= now.timestamp()
-            && metadata.get(METADATA_START_OF_DAY) == Some(&sod.to_string())
-        {
-            console_log!("weather cache hit");
-            let obj = obj.body().expect_throw("weather body not found");
-            let obj = obj.text().await?;
-            let obj: WeatherForecast = serde_json::from_str(obj.as_str())?;
-            return Ok(obj);
+    if let Ok(contents) = tokio::fs::read_to_string("data/weather.json").await {
+        if let Ok(cached) = serde_json::from_str::<CachedWeatherForecast>(&contents) {
+            // if unexpired, return the cached data
+            if cached.expiry >= now.timestamp()
+                && cached.start_of_day == sod
+            {
+                info!("weather cache hit");
+                return cached.weather;
+            }
         }
     }
-    console_log!("weather cache miss");
+    info!("weather cache miss");
 
     let mut weather = pirate_weather::fetch_pirate_weather(
-        env.secret(PIRATE_WEATHER_API_KEY)?.to_string().as_str(),
+        get_pirate_weather_api_key().as_str(),
         WEATHER_LAT,
         WEATHER_LONG,
         sod,
     )
-    .await?;
+    .await
+    .unwrap();
 
     // update the actual current weather
     weather.currently = pirate_weather::fetch_pirate_weather(
-        env.secret(PIRATE_WEATHER_API_KEY)?.to_string().as_str(),
+        get_pirate_weather_api_key().as_str(),
         WEATHER_LAT,
         WEATHER_LONG,
         now.timestamp(),
-    ).await?.currently;
+    ).await.unwrap().currently;
 
     for (i, forecast) in weather.hourly.data.iter().enumerate() {
         let diff = forecast.time - sod;
@@ -119,20 +116,15 @@ async fn fetch_weather<Tz: TimeZone>(
     };
 
     // cache the weather data in the bucket for 1 hour
-    let metadata = HashMap::from([
-        (
-            METADATA_EXPIRY.to_string(),
-            (now.timestamp() + WEATHER_EXPIRY_SECS).to_string(),
-        ),
-        (METADATA_START_OF_DAY.to_string(), sod.to_string()),
-    ]);
-    bucket
-        .put("weather.json", serde_json::to_string(&res)?)
-        .custom_metadata(metadata)
-        .execute()
-        .await?;
-
-    Ok(res)
+    let cached = CachedWeatherForecast {
+        weather: res.clone(),
+        expiry: now.timestamp() + WEATHER_EXPIRY_SECS,
+        start_of_day: sod,
+    };
+    info!("caching weather data: {:?}", cached);
+    let json_str = serde_json::to_string(&cached).unwrap();
+    tokio::fs::write("data/weather.json", json_str).await.unwrap();
+    res
 }
 
 trait GetText {
@@ -155,14 +147,15 @@ impl GetText for Tree {
     }
 }
 
-async fn generate_tree(svg_data: String, opt: usvg::Options, env: Env) -> Result<Tree> {
-    console_log!("get now");
+async fn generate_tree(svg_data: String, opt: usvg::Options) -> Tree {
+    info!("get now");
     let now = chrono::Utc::now().with_timezone(&chrono_tz::US::Eastern);
-    console_log!("get weather");
-    let forecast = fetch_weather(now, env).await?;
-    console_log!("get arrivals");
+    info!("get weather");
+    let forecast = fetch_weather(now).await;
+    info!("get arrivals");
     let blvd_east_arrivals = nj_transit::get_arrival_details(BLVD_EAST_STOP)
-        .await?
+        .await
+        .unwrap()
         .into_iter()
         .filter(|a| {
             a.route_number == 128
@@ -172,7 +165,8 @@ async fn generate_tree(svg_data: String, opt: usvg::Options, env: Env) -> Result
         })
         .collect::<Vec<_>>();
     let park_ave_arrivals = nj_transit::get_arrival_details(PARK_AVE_STOP)
-        .await?
+        .await
+        .unwrap()
         .into_iter()
         .filter(|a| a.route_number == 156 || a.route_number == 89)
         .collect::<Vec<_>>();
@@ -184,9 +178,9 @@ async fn generate_tree(svg_data: String, opt: usvg::Options, env: Env) -> Result
         format!("id=\"precip-time\" x=\"{}%\"", percent * 100.0).as_str(),
     );
 
-    console_log!("get tree");
+    info!("get tree");
     let mut tree = Tree::from_str(&svg_data, &opt).unwrap();
-    console_log!("modify text");
+    info!("modify text");
     tree.modify_node_text("text-time", |time| {
         // Format time as 12-hour clock with AM/PM
         time.chunks[0].text = now.format("%-I:%M %p").to_string().to_lowercase();
@@ -243,71 +237,47 @@ async fn generate_tree(svg_data: String, opt: usvg::Options, env: Env) -> Result
     set_stop_arrivals(&mut tree, "park", park_ave_arrivals);
     set_stop_arrivals(&mut tree, "blvd", blvd_east_arrivals);
 
-    Ok(tree)
+    tree
 }
 
-async fn get_tree(env: Env) -> Result<resvg::Tree> {
-    console_log!("in get_tree");
+async fn get_tree() -> resvg::Tree {
+    info!("in get_tree");
     let mut opt = usvg::Options::default();
     opt.shape_rendering = usvg::ShapeRendering::CrispEdges;
-    console_log!("call generate_tree");
-    let bucket = env.bucket(TINKER_BUCKET)?;
-    console_log!("bucket found, getting template data");
-    let svg_data = bucket
-        .get("template.svg")
-        .execute()
-        .await?
-        .expect_throw("svg object not found")
-        .body()
-        .expect_throw("svg body not found")
-        .text()
-        .await?;
-    let mut tree = generate_tree(svg_data, opt, env).await?;
+    info!("call generate_tree");
+    info!("bucket found, getting template data");
+    let svg_data = tokio::fs::read_to_string("data/template.svg").await.unwrap();
+    let mut tree = generate_tree(svg_data, opt).await;
 
-    async fn get_font_data(path: &str, bucket: &Bucket) -> Result<Vec<u8>> {
-        bucket
-            .get(path)
-            .execute()
-            .await?
-            .expect_throw("font object not found")
-            .body()
-            .expect_throw("font body not found")
-            .bytes()
-            .await
-    }
-
-    console_log!("gen fonts");
+    info!("gen fonts");
     let mut fontdb = fontdb::Database::new();
-    fontdb.load_font_data(get_font_data("fonts/BebasNeue-Regular.ttf", &bucket).await?);
-    fontdb.load_font_data(get_font_data("fonts/Louis George Cafe.ttf", &bucket).await?);
-    fontdb.load_font_data(get_font_data("fonts/Louis George Cafe Bold.ttf", &bucket).await?);
+    fontdb.load_font_data(tokio::fs::read("data/fonts/BebasNeue-Regular.ttf").await.unwrap());
+    fontdb.load_font_data(tokio::fs::read("data/fonts/Louis George Cafe.ttf").await.unwrap());
+    fontdb.load_font_data(tokio::fs::read("data/fonts/Louis George Cafe Bold.ttf").await.unwrap());
     tree.convert_text(&fontdb);
-    Ok(resvg::Tree::from_usvg(&tree))
+    resvg::Tree::from_usvg(&tree)
 }
 
-async fn get_pixmap(env: Env) -> Result<Pixmap> {
-    let rtree = get_tree(env).await?;
-    console_log!("got tree");
+pub async fn get_pixmap() -> Pixmap {
+    let rtree = get_tree().await;
+    info!("got tree");
     let pixmap_size = rtree.size.to_int_size();
-    let mut pixmap = tiny_skia::Pixmap::new(pixmap_size.width(), pixmap_size.height())
-        .expect_throw("failed to create pixmap");
+    let mut pixmap = tiny_skia::Pixmap::new(pixmap_size.width(), pixmap_size.height()).unwrap();
     rtree.render(tiny_skia::Transform::default(), &mut pixmap.as_mut());
-    Ok(pixmap)
+    pixmap
 }
 
-async fn route_img(env: Env) -> Result<Response> {
+pub async fn gen_img() -> Vec<u8> {
     // return the image as a png
-    let pixmap = get_pixmap(env).await?;
+    let pixmap = get_pixmap().await;
 
-    let data = pixmap.encode_png().map_err(|_| "failed to encode png")?;
-    let mut headers = Headers::new();
-    headers.set("Content-Type", "image/png")?;
-    Ok(Response::from_body(ResponseBody::Body(data))?.with_headers(headers))
+    let data = pixmap.encode_png().unwrap();
+    data
 }
 
-async fn route_raw(env: Env) -> Result<Response> {
+pub async fn gen_raw() -> Vec<u8> {
     // return the image as raw bytes (1 byte per pixel)
-    let pixmap = get_pixmap(env).await?;
+    let pixmap = get_pixmap().await;
     let data: BitVec<u8> = pixmap
         .pixels()
         .into_iter()
@@ -323,21 +293,5 @@ async fn route_raw(env: Env) -> Result<Response> {
     if tail.is_some() {
         panic!("pixmap size is not a multiple of 8");
     }
-    Ok(Response::from_bytes(body.to_vec())?)
-}
-
-#[event(fetch)]
-async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
-    console_log!("{}: in main", req.path());
-    if !matches!(req.method(), Method::Get) {
-        return Response::error("Method Not Allowed", 405);
-    }
-    if req.path() == "/img" {
-        return route_img(env).await;
-    }
-    else if req.path() == "/raw" {
-        return route_raw(env).await;
-    }
-
-    Response::error("Not Found", 404)
+    body.to_vec()
 }
