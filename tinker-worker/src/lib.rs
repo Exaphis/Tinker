@@ -239,19 +239,31 @@ async fn generate_tree(svg_data: String, opt: usvg::Options) -> Result<Tree, Box
 
 async fn get_tree() -> Result<resvg::Tree, Box<dyn std::error::Error>> {
     info!("in get_tree");
+    
+    // Load and cache template SVG data
+    static TEMPLATE_DATA: tokio::sync::OnceCell<String> = tokio::sync::OnceCell::const_new();
+    let svg_data = TEMPLATE_DATA.get_or_init(|| async {
+        tokio::fs::read_to_string("data/template.svg").await.unwrap()
+    }).await;
+
+    // Load and cache font data
+    static FONT_DATA: tokio::sync::OnceCell<fontdb::Database> = tokio::sync::OnceCell::const_new();
+    let fontdb = FONT_DATA.get_or_init(|| async {
+        let mut db = fontdb::Database::new();
+        db.load_font_data(tokio::fs::read("data/fonts/BebasNeue-Regular.ttf").await.unwrap());
+        db.load_font_data(tokio::fs::read("data/fonts/Louis George Cafe.ttf").await.unwrap());
+        db.load_font_data(tokio::fs::read("data/fonts/Louis George Cafe Bold.ttf").await.unwrap());
+        db
+    }).await;
+
     let mut opt = usvg::Options::default();
     opt.shape_rendering = usvg::ShapeRendering::CrispEdges;
+    
     info!("call generate_tree");
-    info!("bucket found, getting template data");
-    let svg_data = tokio::fs::read_to_string("data/template.svg").await?;
-    let mut tree = generate_tree(svg_data, opt).await?;
+    let mut tree = generate_tree(svg_data.clone(), opt).await?;
 
-    info!("gen fonts");
-    let mut fontdb = fontdb::Database::new();
-    fontdb.load_font_data(tokio::fs::read("data/fonts/BebasNeue-Regular.ttf").await?);
-    fontdb.load_font_data(tokio::fs::read("data/fonts/Louis George Cafe.ttf").await?);
-    fontdb.load_font_data(tokio::fs::read("data/fonts/Louis George Cafe Bold.ttf").await?);
-    tree.convert_text(&fontdb);
+    info!("convert text");
+    tree.convert_text(fontdb);
     Ok(resvg::Tree::from_usvg(&tree))
 }
 
@@ -261,14 +273,15 @@ pub async fn get_pixmap() -> Result<Pixmap, Box<dyn std::error::Error>> {
     let pixmap_size = rtree.size.to_int_size();
     let mut pixmap = tiny_skia::Pixmap::new(pixmap_size.width(), pixmap_size.height()).unwrap();
     rtree.render(tiny_skia::Transform::default(), &mut pixmap.as_mut());
+    info!("got pixmap");
     Ok(pixmap)
 }
 
 pub async fn gen_img() -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     // return the image as a png
     let pixmap = get_pixmap().await?;
-
     let data = pixmap.encode_png()?;
+    info!("encoded png");
     Ok(data)
 }
 
@@ -290,5 +303,6 @@ pub async fn gen_raw() -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     if tail.is_some() {
         panic!("pixmap size is not a multiple of 8");
     }
+    info!("encoded raw");
     Ok(body.to_vec())
 }
