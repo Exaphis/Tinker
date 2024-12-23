@@ -144,7 +144,7 @@ void show_raw_bitmap() {
 
     HTTPClient http;
     Serial.println("Connecting to host...");
-    if (!http.begin(*client, "tinker-worker.exaphis.workers.dev", 443, "/raw")) {
+    if (!http.begin(*client, "tinker.kev3u.com", 443, "/raw")) {
         Serial.println("Connection failed");
         return;
     }
