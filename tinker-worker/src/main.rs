@@ -6,11 +6,31 @@ async fn main() {
     dotenv::dotenv().ok();
     env_logger::init();
 
+    let matches = clap::Command::new("tinker-worker")
+        .about("Start the Tinker display server.")
+        .arg(clap::Arg::new("host")
+            .short('h')
+            .long("host")
+            .value_name("HOST")
+            .help("Host address to bind to")
+            .default_value("0.0.0.0"))
+        .arg(clap::Arg::new("port")
+            .short('p')
+            .long("port")
+            .value_name("PORT")
+            .help("Port to listen on")
+            .default_value("3000"))
+        .get_matches();
+
+    let host = matches.get_one::<String>("host").unwrap();
+    let port = matches.get_one::<String>("port").unwrap();
+    let addr = format!("{}:{}", host, port);
+
     let app = axum::Router::new()
         .route("/img", axum::routing::get(img_handler))
         .route("/raw", axum::routing::get(raw_handler));
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     println!("Listening on {}", listener.local_addr().unwrap());
     axum::serve(listener, app.into_make_service()).await.unwrap();
 }
